@@ -9,7 +9,9 @@
     "pm2": "pm2 start server/index.js --name warrcats --watch false"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.4.3",
+    "jsonwebtoken": "^9.0.2",
     "ws": "^8.16.0"
   },
   "devDependencies": {
