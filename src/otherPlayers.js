@@ -54,8 +54,9 @@ export function updateOtherPlayers() {
     _setWalking(other, moving);
 
     // Разворот
-    const sc = Math.abs(other.spine.scale.x);
-    other.spine.scale.x = other.facingLeft ? sc : -sc;
+    const sc = other.size ?? 0.7;
+other.spine.scale.x = other.facingLeft ? sc : -sc;
+other.spine.scale.y = sc;
 
     // Имя над головой
     other.nameText.x = other.spine.x;
