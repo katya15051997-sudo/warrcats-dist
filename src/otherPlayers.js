@@ -53,10 +53,10 @@ export function updateOtherPlayers() {
     const moving = Math.abs(other.targetX - other.spine.x) > 1 || other.walking;
     _setWalking(other, moving);
 
-    // Разворот
-    const sc = other.size ?? 0.7;
-other.spine.scale.x = other.facingLeft ? sc : -sc;
-other.spine.scale.y = sc;
+    // Разворот — используем сохранённый размер
+    const sc = (other.size ?? 0.7) * 0.7;
+    other.spine.scale.x = other.facingLeft ? sc : -sc;
+    other.spine.scale.y = sc;
 
     // Имя над головой
     other.nameText.x = other.spine.x;
@@ -124,8 +124,7 @@ async function _createOther(p) {
         if (eyeSec) applyEyeColor(spine, eyeSec);
       }
 
-      spine.scale.set(p.size ?? 0.7);
-console.log('[createOther] size:', p.size, 'scale:', spine.scale.x, spine.scale.y);
+      spine.scale.set((p.size ?? 0.7) * 0.7);
       spine.position.set(p.x, p.y);
 
     } catch (e) {
@@ -210,7 +209,7 @@ function _updateTarget(p) {
 
   // Обновляем размер
   if (p.size && p.size !== other.size) {
-    other.spine.scale.set(p.size);
+    other.spine.scale.set(p.size * 0.7);
     other.size = p.size;
   }
 
