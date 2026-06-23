@@ -124,7 +124,8 @@ async function _createOther(p) {
         if (eyeSec) applyEyeColor(spine, eyeSec);
       }
 
-      spine.scale.set(0.7);
+      spine.scale.set(p.size ?? 0.7);
+console.log('[createOther] size:', p.size, 'scale:', spine.scale.x, spine.scale.y);
       spine.position.set(p.x, p.y);
 
     } catch (e) {
