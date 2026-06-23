@@ -86,7 +86,6 @@ export function getAllOthers() {
 // ─── Внутреннее ──────────────────────────────────────────────────────────────
 
 async function _createOther(p) {
-  console.log('[createOther]', p.id, p.name);
   if (!_world) return;
 
   let spine = null;
@@ -183,6 +182,7 @@ async function _createOther(p) {
     max_h:     p.max_h ?? 100,
     walking:   false,
     pose:      'normal',
+    size:      p.size ?? 0.7,
   });
 }
 
@@ -206,11 +206,18 @@ function _updateTarget(p) {
   other.h          = p.h          ?? other.h;
   other.max_h      = p.max_h      ?? other.max_h;
 
+  // Обновляем размер
+  if (p.size && p.size !== other.size) {
+    other.spine.scale.set(p.size);
+    other.size = p.size;
+  }
+
   // Применяем позу если изменилась
   const newPose = p.pose ?? 'normal';
   if (newPose !== other.pose && other.spine.state) {
     setCharacterPose(other.spine, newPose);
     other.pose = newPose;
+    if (newPose === 'normal') other._isWalking = null;
   }
 }
 
