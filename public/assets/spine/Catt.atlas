@@ -1,0 +1,118 @@
+
+Catt.png
+size: 1167,203
+format: RGBA8888
+filter: MipMapLinearLinear,MipMapLinearLinear
+repeat: none
+Paw LP
+  rotate: 270
+  xy: 903, 7
+  size: 50, 137
+  orig: 50, 137
+  offset: 0, 0
+  index: -1
+Paw LZ
+  rotate: true
+  xy: 285, 2
+  size: 123, 131
+  orig: 123, 131
+  offset: 0, 0
+  index: -1
+Paw PP
+  rotate: false
+  xy: 1009, 50
+  size: 54, 133
+  orig: 54, 133
+  offset: 0, 0
+  index: -1
+Paw PZ
+  rotate: 270
+  xy: 886, 94
+  size: 109, 131
+  orig: 109, 131
+  offset: 0, 0
+  index: -1
+Sit
+  rotate: true
+  xy: 280, 3
+  size: 200, 227
+  orig: 220, 229
+  offset: 9, 0
+  index: -1
+body
+  rotate: 270
+  xy: 729, 8
+  size: 194, 92
+  orig: 194, 92
+  offset: 0, 0
+  index: -1
+ear
+  rotate: true
+  xy: 823, 3
+  size: 46, 47
+  orig: 46, 47
+  offset: 0, 0
+  index: -1
+eyes
+  rotate: false
+  xy: 1, 21
+  size: 12, 12
+  orig: 15, 12
+  offset: 0, 0
+  index: -1
+fat
+  rotate: true
+  xy: 504, 7
+  size: 194, 109
+  orig: 194, 109
+  offset: 0, 0
+  index: -1
+head
+  rotate: true
+  xy: 1113, 111
+  size: 62, 52
+  orig: 62, 52
+  offset: 0, 0
+  index: -1
+massive
+  rotate: 270
+  xy: 609, 8
+  size: 195, 122
+  orig: 195, 122
+  offset: 0, 0
+  index: -1
+neck
+  rotate: 180
+  xy: 1100, 23
+  size: 58, 87
+  orig: 58, 87
+  offset: 0, 0
+  index: -1
+neck_fat
+  rotate: false
+  xy: 1055, 2
+  size: 58, 98
+  orig: 58, 105
+  offset: 0, 7
+  index: -1
+neck_massive
+  rotate: 180
+  xy: 1050, 86
+  size: 61, 116
+  orig: 61, 117
+  offset: 0, 0
+  index: -1
+sleep
+  rotate: false
+  xy: 1, 34
+  size: 277, 168
+  orig: 277, 169
+  offset: 0, 1
+  index: -1
+tail
+  rotate: true
+  xy: 809, 22
+  size: 181, 113
+  orig: 182, 113
+  offset: 0, 0
+  index: -1
