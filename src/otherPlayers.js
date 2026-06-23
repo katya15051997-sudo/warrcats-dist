@@ -54,7 +54,7 @@ export function updateOtherPlayers() {
     _setWalking(other, moving);
 
     // Разворот — используем сохранённый размер
-    const sc = (other.size ?? 0.7) * 0.7;
+    const sc = other.size ?? 0.7;
     other.spine.scale.x = other.facingLeft ? sc : -sc;
     other.spine.scale.y = sc;
 
@@ -124,7 +124,7 @@ async function _createOther(p) {
         if (eyeSec) applyEyeColor(spine, eyeSec);
       }
 
-      spine.scale.set((p.size ?? 0.7) * 0.7);
+      spine.scale.set(p.size ?? 0.7);
       spine.position.set(p.x, p.y);
 
     } catch (e) {
@@ -209,7 +209,7 @@ function _updateTarget(p) {
 
   // Обновляем размер
   if (p.size && p.size !== other.size) {
-    other.spine.scale.set(p.size * 0.7);
+    other.spine.scale.set(p.size);
     other.size = p.size;
   }
 
