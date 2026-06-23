@@ -63,6 +63,11 @@ db.exec(`
     text        TEXT,
     ts          INTEGER DEFAULT (strftime('%s','now'))
   );
+
+  -- Индексы (создаются один раз, ускоряют логин и выборку персонажей)
+  CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+  CREATE INDEX IF NOT EXISTS idx_chars_user_id  ON characters(user_id);
+  CREATE INDEX IF NOT EXISTS idx_chat_ts        ON chat_log(ts DESC);
 `);
 
 // ─────────────────────────────────────────────────────────────────────────────
