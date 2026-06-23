@@ -86,6 +86,7 @@ export function getAllOthers() {
 // ─── Внутреннее ──────────────────────────────────────────────────────────────
 
 async function _createOther(p) {
+  console.log('[createOther]', p.id, p.name);
   if (!_world) return;
 
   let spine = null;
