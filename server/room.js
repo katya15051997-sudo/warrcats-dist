@@ -50,6 +50,8 @@ class Room {
       thirst:   charData?.thirst?? 100,
       ss:       charData?.ss    ?? 100,
       xp:       charData?.xp   ?? 0,
+      size:     charData?.size ?? 0.7,
+      pose:     'normal',
       // Спарринг
       sparringPending: null, // { fromId, timeoutHandle }
     };
@@ -131,6 +133,10 @@ class Room {
         player.food   = msg.payload.food   ?? player.food;
         player.thirst = msg.payload.thirst ?? player.thirst;
         player.ss     = msg.payload.ss     ?? player.ss;
+        break;
+
+      case 'pose':
+        player.pose = msg.payload.pose ?? 'normal';
         break;
 
       default:
@@ -267,6 +273,8 @@ class Room {
       x: Math.round(p.x), y: Math.round(p.y),
       facingLeft: p.facingLeft, walking: p.walking,
       h: Math.round(p.h), max_h: Math.round(p.max_h), e: Math.round(p.e),
+      pose: p.pose ?? 'normal',
+      size: p.size ?? 0.7,
     };
   }
 

@@ -13,6 +13,7 @@ import { showContextMenu, runDynamicAction, runIndefiniteAction, runTimedAction,
 import { setSleeping, restSleep, getMaxSleep, healPercent } from './menu/needs-system.js';
 import { getNeedValue } from './menu/bottom-menu.js';
 import { setCharacterPose } from './menu/character.js';
+import { send } from './network.js';
 
 const ICON_DURATION_MS = 3000; // сколько показывать иконку мурлыканья/шипения
 const ICON_OFFSET_Y = 140;     // насколько выше персонажа показывать иконку
@@ -65,6 +66,7 @@ export function resetCharacterPose() {
   charSpritesRef.forEach(s => {
     setCharacterPose(s, 'normal');
   });
+  send('pose', { pose: 'normal' });
 }
 
 // "Сесть" — бессрочный отдых: персонаж сидит и медленно восстанавливает
@@ -74,9 +76,11 @@ function actionSit() {
     label: 'Сесть',
     start: () => {
       charSpritesRef.forEach(s => setCharacterPose(s, 'sit'));
+      send('pose', { pose: 'sit' });
     },
     stop: () => {
       charSpritesRef.forEach(s => setCharacterPose(s, 'normal'));
+      send('pose', { pose: 'normal' });
     },
 
   });
@@ -93,10 +97,12 @@ function actionSleep() {
     start: () => {
       setSleeping(true);
       charSpritesRef.forEach(s => setCharacterPose(s, 'sleep'));
+      send('pose', { pose: 'sleep' });
     },
     stop: () => {
       setSleeping(false);
       charSpritesRef.forEach(s => setCharacterPose(s, 'normal'));
+      send('pose', { pose: 'normal' });
     },
     getCurrentValue: () => getNeedValue('e') ?? 0,
     getMaxValue: () => getMaxSleep(),

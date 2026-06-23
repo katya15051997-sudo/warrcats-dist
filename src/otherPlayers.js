@@ -5,7 +5,7 @@
 
 import * as PIXI from 'pixi.js';
 import { getMyId } from './network.js';
-import { applyCharacterBuild, applyCharacterColors, applyEyeColor } from './menu/character.js';
+import { applyCharacterBuild, applyCharacterColors, applyEyeColor, setCharacterPose } from './menu/character.js';
 
 const others = new Map(); // connId → { spine, nameText, hpBg, hpFill, name, targetX, targetY, facingLeft, h, max_h, walking }
 let _world    = null;
@@ -181,6 +181,7 @@ async function _createOther(p) {
     h:         p.h    ?? 100,
     max_h:     p.max_h ?? 100,
     walking:   false,
+    pose:      'normal',
   });
 }
 
@@ -203,6 +204,13 @@ function _updateTarget(p) {
   other.walking    = p.walking    ?? false;
   other.h          = p.h          ?? other.h;
   other.max_h      = p.max_h      ?? other.max_h;
+
+  // Применяем позу если изменилась
+  const newPose = p.pose ?? 'normal';
+  if (newPose !== other.pose && other.spine.state) {
+    setCharacterPose(other.spine, newPose);
+    other.pose = newPose;
+  }
 }
 
 function _removeOther(id) {
