@@ -288,6 +288,7 @@ async function startGame(app, settings) {
       name:       activeCharData?.name ?? 'Безымянный',
       build:      activeCharData?.build ?? 'lean',
       appearance: activeCharData?.app  ?? null,
+size:       activeCharData?.size ?? 0.7,
       h:    getNeedValue('h')    ?? 100,
       max_h: 30, // getMaxHealth() при желании
       e:    getNeedValue('e')    ?? 100,
