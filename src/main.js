@@ -288,7 +288,13 @@ async function startGame(app, settings) {
       name:       activeCharData?.name ?? 'Безымянный',
       build:      activeCharData?.build ?? 'lean',
       appearance: activeCharData?.app  ?? null,
-size:       activeCharData?.size ?? 0.7,
+      size: (() => {
+  const age = activeCharData?.age ?? 0;
+  if (age <= 6) return 0.3;
+  if (age <= 9) return 0.4;
+  if (age <= 13) return 0.5;
+  return activeCharData?.size ?? 0.7;
+})(),
       h:    getNeedValue('h')    ?? 100,
       max_h: 30, // getMaxHealth() при желании
       e:    getNeedValue('e')    ?? 100,
