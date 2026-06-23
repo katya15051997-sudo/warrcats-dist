@@ -22,6 +22,9 @@ import { spendSleepForStrike, gainFood } from './menu/needs-system.js';
 import { showToast } from './notify.js';
 import { refreshActivePanel } from './menu/bottom-menu.js';
 
+// ─── Авторизация ─────────────────────────────────────────────────────────────
+import { requireAuth } from './auth.js';
+
 // ─── Мультиплеер ─────────────────────────────────────────────────────────────
 import {
   connect, disconnect, send, on as netOn,
@@ -44,6 +47,10 @@ const PERIOD_SYNC_MS = 500; // задержка применения смены 
   });
 
   document.getElementById('pixi-container').appendChild(app.view);
+
+  // Проверяем / запрашиваем авторизацию перед показом меню
+  const user = await requireAuth();
+  window.currentUser = user; // { userId, username, characters }
 
   window.startGameCallback = (settings) => startGame(app, settings);
   showMainMenu(app, window.startGameCallback);
