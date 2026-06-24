@@ -77,12 +77,10 @@ async function startGame(app, settings) {
     reloadNeedsSystem();
     reloadNeedsAndSkills();
 
-    // Фон и персонаж грузятся параллельно
-    const [, { idleChar, walkChar, eyeSprite, setWalking, setFacing, getFacingLeft }] =
-      await Promise.all([
-        loadBackground(),
-        createCharacters(app),
-      ]);
+    await loadBackground();
+
+    const { idleChar, walkChar, eyeSprite, setWalking, setFacing, getFacingLeft } =
+      await createCharacters(app);
 
     const activeCharData = getActiveCharacter();
 
@@ -118,18 +116,18 @@ async function startGame(app, settings) {
       applyCharacterData(idleChar, activeCharData);
     }
 
-    // Объекты мира, дичь и лиса грузятся параллельно
-    await Promise.all([
-      createWorldObjects(world),
-      createPreySystem(world, {
-        minX: 100, maxX: LargeFloor.width  - 100,
-        minY: 100, maxY: LargeFloor.height - 100,
-      }),
-      createFoxEnemy(world),
-    ]);
+    await createWorldObjects(world);
 
     const WORLD_WIDTH  = LargeFloor.width;
     const WORLD_HEIGHT = LargeFloor.height;
+
+    // Система дичи (локальная — для соло. В мультиплеере позиции заменятся серверными)
+    await createPreySystem(world, {
+      minX: 100, maxX: WORLD_WIDTH - 100,
+      minY: 100, maxY: WORLD_HEIGHT - 100,
+    });
+
+    await createFoxEnemy(world);
 
     // ─── Удар E ────────────────────────────────────────────────────────────
     setStrikeHandler(() => {

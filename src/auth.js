@@ -186,14 +186,10 @@ function injectAuthStyles() {
 export async function requireAuth() {
   injectAuthStyles();
 
+  // Проверяем сохранённую сессию
   const session = getSession();
   if (session) {
-    // Показываем заглушку немедленно — не ждём сервер
-    const loadingEl = _showLoadingOverlay();
-
     const me = await fetchMe();
-    loadingEl.remove();
-
     if (me) return me; // токен валидный
     // токен протух — чистим и показываем форму
     clearSession();
@@ -202,22 +198,6 @@ export async function requireAuth() {
   return new Promise((resolve) => {
     _showAuthScreen(resolve);
   });
-}
-
-function _showLoadingOverlay() {
-  const el = document.createElement('div');
-  el.id = 'auth-loading';
-  el.style.cssText = `
-    position: fixed; inset: 0; z-index: 9999;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(5, 12, 5, 0.97);
-    font-family: 'Ink Free', 'Segoe Print', cursive;
-    color: #ffcc80; font-size: 22px;
-    text-shadow: 1px 1px 0 #3a2410;
-  `;
-  el.textContent = 'Загрузка…';
-  document.body.appendChild(el);
-  return el;
 }
 
 // ─── Рендер экрана ────────────────────────────────────────────────────────────
