@@ -58,9 +58,9 @@ export function updateOtherPlayers() {
     other.spine.scale.x = other.facingLeft ? sc : -sc;
     other.spine.scale.y = sc;
 
-    // Имя над головой
+    // Имя под персонажем по центру
     other.nameText.x = other.spine.x;
-    other.nameText.y = other.spine.y - 110;
+    other.nameText.y = other.spine.y + 8;
 
     // HP
     _updateHealthBar(other);
@@ -87,8 +87,6 @@ export function getAllOthers() {
 // ─── Внутреннее ──────────────────────────────────────────────────────────────
 
 async function _createOther(p) {
-  console.log('[createOther] id:', p.id, 'name:', p.name, 'size:', p.size);
-  if (!_world) return;
   if (!_world) return;
 
   let spine = null;
@@ -116,6 +114,9 @@ async function _createOther(p) {
 
       // Телосложение
       applyCharacterBuild(spine, p.build ?? 'lean');
+      // _charBuild должен быть установлен до любого вызова setCharacterPose,
+      // иначе resolveBuildKeys получит undefined и вернёт дефолтный скин
+      spine._charBuild = p.build ?? 'lean';
 
       // Цвета
       if (p.appearance) {
@@ -154,7 +155,7 @@ async function _createOther(p) {
     spine._isWalking = false;
   }
 
-  // Имя
+  // Имя под персонажем по центру
   const nameText = new PIXI.Text(p.name ?? 'Без имени', {
     fontSize: 14,
     fill: 0xffcc80,
@@ -162,9 +163,9 @@ async function _createOther(p) {
     stroke: 0x000000,
     strokeThickness: 3,
   });
-  nameText.anchor.set(0.5, 1);
+  nameText.anchor.set(0.5, 0); // якорь сверху по центру
   nameText.x = p.x;
-  nameText.y = p.y - 110;
+  nameText.y = p.y + 8;        // чуть ниже точки привязки ног
 
   // HP
   const hpBg   = new PIXI.Graphics();

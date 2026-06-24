@@ -64,9 +64,9 @@ export async function createCharacters(app) {
   let facingLeft = false;
 
   function updateFlip() {
-
-    // что и давало растягивание персонажа при нестандартном размере.
-    const currentScale = Math.abs(char.scale.y) || Math.abs(char.scale.x) || baseScale;
+    // Читаем _baseScale с самого объекта — он обновляется в applyCharacterData
+    // при задании нестандартного размера (size для котят и т.п.).
+    const currentScale = char._baseScale || baseScale;
     char.scale.x = facingLeft ? currentScale : -currentScale;
     char.scale.y = currentScale;
   }
@@ -444,8 +444,11 @@ export function applyCharacterData(spine, charData) {
   applyCharacterBuild(spine, charData.build);
   applyCharacterColors(spine, charData.app);
 
-  // Масштаб по размеру (size 0..1, базовый масштаб 0.7)
+  // Масштаб по размеру (size 0..1, базовый масштаб 0.7).
+  // Обновляем _baseScale чтобы updateFlip() в main.js использовал правильный размер,
+  // иначе при первом же развороте scale сбрасывается к старому _baseScale.
   if (charData.size !== undefined) {
+    spine._baseScale = charData.size;
     spine.scale.set(charData.size);
   }
 }
@@ -472,12 +475,6 @@ export function setCharacterPose(spine, pose) {
 
   const skeleton = spine.skeleton;
   
-  console.log(
-  skeleton.slots.map(s => ({
-    name: s.data.name,
-    attachment: s.attachment?.name
-  }))
-);
   const skeletonData = skeleton.data;
 
   // Текущее телосложение, применённое через applyCharacterBuild — нужно,
