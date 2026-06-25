@@ -10,6 +10,7 @@
 //           дефолтное); параметр оставлен для будущей реализации "редактировать".
 // onSaved — вызывается с сохранённым персонажем после успешного "Сохранить".
 
+import * as PIXI from 'pixi.js';
 import { saveCharacter, setActiveCharacter } from '../character/character-save.js';
 import { apiSaveCharacter } from '../net/api.js';
 import { applyCharacterBuild, applyCharacterColors, applyEyeColor } from '../character/character.js';
