@@ -1,24 +1,23 @@
 {
-  "name": "warrcats2",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
+  "name": "warrcats-server",
+  "version": "1.0.0",
+  "description": "WarrCats multiplayer game server",
+  "main": "server/index.js",
   "scripts": {
-    "start": "npm run dev",
-    "build": "npm run lint && vite build",
-    "lint": "eslint .",
-    "dev": "vite"
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "pm2": "pm2 start server/index.js --name warrcats --watch false"
   },
   "dependencies": {
-    "pixi-spine": "^4.0.6",
-    "pixi.js": "^7.4.3"
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^9.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "eslint": "^9.21.0",
-    "eslint-config-prettier": "^10.1.2",
-    "eslint-plugin-prettier": "^5.2.6",
-    "prettier": "^3.5.3",
-    "vite": "^6.4.3"
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

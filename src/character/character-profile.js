@@ -7,8 +7,8 @@
 // Каждые 3 луны здоровье персонажа увеличивается на +4% от текущего значения
 // (с учётом максимума "Максимальное здоровье" из настроек сервера).
 
-import { setNeedValue } from './bottom-menu.js';
-import { currentSettings } from './menu.js';
+import { setNeedValue } from '../ui/bottom-menu.js';
+import { currentSettings } from '../config/game-settings.js';
 import { getCharacterStorageKey } from './character-save.js';
 
 const STORAGE_KEY_BASE = 'warrcats_character_profile';

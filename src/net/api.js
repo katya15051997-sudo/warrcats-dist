@@ -87,8 +87,8 @@ export async function fetchMe() {
 }
 
 // Регистрация
-export async function apiRegister(username, password) {
-  const data = await apiPost('/api/register', { username, password });
+export async function apiRegister(username, email, password) {
+  const data = await apiPost('/api/register', { username, email, password });
   saveSession(data.token, data.userId, data.username);
   return data;
 }

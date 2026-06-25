@@ -1,30 +1,11 @@
-import { showMainMenu } from './menu.js';
+import { initLanding } from './landing.js';
 import { hideBottomMenu } from './bottom-menu.js';
-import { stopNeedsSystem } from './needs-system.js';
-import { stopActiveAction } from '../world-objects.js';
-import { loadCharacters, setActiveCharacter, getActiveCharacter } from './character-save.js';
-import { idleChar, applyCharacterData } from './character.js';
+import { stopNeedsSystem } from '../systems/needs-system.js';
+import { stopActiveAction } from '../world/world-objects.js';
+import { loadCharacters, setActiveCharacter, getActiveCharacter } from '../character/character-save.js';
+import { idleChar, applyCharacterData } from '../character/character.js';
+import { buildImg, bodyToFilter } from '../character/character-preview.js';
 import { injectGameStyles } from '../styles.js';
-
-// Картинки-превью на каждое телосложение.
-const BUILD_IMGS = {
-  lean:  '/assets/spine/Cat_lean.png',
-  large: '/assets/spine/Cat_massive.png',
-  fat:   '/assets/spine/Cat_fat.png',
-};
-function buildImg(build){ return BUILD_IMGS[build] || BUILD_IMGS.lean; }
-
-// Утилита окраски превью персонажа через CSS-фильтр (аналог menu.js)
-function bodyToFilter(body) {
-  if (!body) return '';
-  const catHue = v => v <= 70 ? Math.round((v / 70) * 60) : Math.round(180 + ((v - 70) / 30) * 60);
-  const catSat = v => Math.round((v / 100) * 100);
-  const hslH = catHue(body.hue);
-  const hueRotate = hslH - 38;
-  const satPct = Math.round(10 + (catSat(body.saturation) / 100) * 350);
-  const brightF = (0.3 + ((body.brightness - 10) / 80) * 1.3).toFixed(2);
-  return `sepia(1) hue-rotate(${hueRotate}deg) saturate(${satPct}%) brightness(${brightF})`;
-}
 
 let ingameMenuContainer = null;
 
@@ -55,7 +36,6 @@ export function showInGameMenu(app) {
 
   injectGameStyles();
 
-  // Кнопки
   document.getElementById('btn-resume').onclick = hideInGameMenu;
   
   document.getElementById('btn-load-char').onclick = () => {
@@ -68,7 +48,7 @@ export function showInGameMenu(app) {
     stopNeedsSystem();
     hideBottomMenu();
     hideInGameMenu();
-    showMainMenu(app, window.startGameCallback);
+    initLanding(window.startGameCallback);
   };
 }
 
@@ -79,7 +59,6 @@ export function hideInGameMenu() {
   }
 }
 
-// Выбор персонажа прямо в игре (без перезагрузки)
 function showInGameCharacterSelect() {
   const BUILD_LABELS = { lean: 'Lean', large: 'Massive', fat: 'Fat' };
 
@@ -137,14 +116,9 @@ function showInGameCharacterSelect() {
           + 'color:' + (isActive ? '#8fd14f' : '#ffcc80') + ';';
         btn.addEventListener('click', () => {
           setActiveCharacter(char);
-          // Применяем телосложение/цвета выбранного персонажа сразу к живому
-          // Spine-объекту в игре, чтобы тип телосложения корректно переключался
-          // без перезапуска. Возраст/потребности/навыки по-прежнему обновятся
-          // полностью при следующем старте игры.
           try { if (idleChar) applyCharacterData(idleChar, char); } catch (e) { console.warn(e); }
-          // Перечитываем профиль/потребности под нового активного персонажа
-          import('./character-profile.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
-          import('./needs-system.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
+          import('../character/character-profile.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
+          import('../systems/needs-system.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
           render();
           const banner = document.createElement('div');
           banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(58,47,30,0.97);border:2px solid #8B5A2B;color:#ffcc80;padding:12px 28px;border-radius:10px;font-size:14px;z-index:9999;pointer-events:none;';

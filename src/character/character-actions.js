@@ -9,11 +9,11 @@
 // "Мурлыкать"/"Шипеть" — показывают эмодзи-иконку над персонажем на несколько секунд.
 
 import * as PIXI from 'pixi.js';
-import { showContextMenu, runDynamicAction, runIndefiniteAction, runTimedAction, stopActiveAction } from './world-objects.js';
-import { setSleeping, restSleep, getMaxSleep, healPercent } from './menu/needs-system.js';
-import { getNeedValue } from './menu/bottom-menu.js';
-import { setCharacterPose } from './menu/character.js';
-import { send } from './network.js';
+import { showContextMenu, runDynamicAction, runIndefiniteAction, runTimedAction, stopActiveAction } from '../world/world-objects.js';
+import { setSleeping, restSleep, getMaxSleep, healPercent } from '../systems/needs-system.js';
+import { getNeedValue } from '../ui/bottom-menu.js';
+import { setCharacterPose } from './character.js';
+import { send } from '../net/network.js';
 
 const ICON_DURATION_MS = 3000; // сколько показывать иконку мурлыканья/шипения
 const ICON_OFFSET_Y = 140;     // насколько выше персонажа показывать иконку

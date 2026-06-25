@@ -3,7 +3,7 @@
 // Enter открывает/закрывает ввод. T — альтернативный триггер.
 // Импортирует send из network.js для отправки.
 
-import { send } from './network.js';
+import { send } from '../net/network.js';
 import { showToast } from './notify.js';
 
 const MAX_MESSAGES = 80; // максимум в DOM

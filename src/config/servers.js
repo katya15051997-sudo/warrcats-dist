@@ -1,10 +1,4 @@
-// servers.js
-// Хранилище серверов с их настройками
-
-// Ключ для localStorage
 const STORAGE_KEY = 'warrcats_servers';
-
-// Базовые настройки по умолчанию
 export const defaultSettings = {
   maxHealth: 100,
   maxStrength: 50,
@@ -18,7 +12,6 @@ export const defaultSettings = {
   selectedMap: "forest"
 };
 
-// Начальные серверы (для демонстрации)
 const initialServers = [
   {
     id: "server_4",
@@ -40,13 +33,11 @@ const initialServers = [
   }
 ];
 
-// Загрузка всех серверов из localStorage
 export function loadServers() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     try {
       const servers = JSON.parse(saved);
-      // Проверяем, что массив не пустой
       if (servers && servers.length > 0) {
         return servers;
       }
@@ -54,18 +45,14 @@ export function loadServers() {
       console.error('Ошибка загрузки серверов:', e);
     }
   }
-  
-  // Если ничего нет, сохраняем начальные серверы
   saveServers(initialServers);
   return [...initialServers];
 }
 
-// Сохранение всех серверов
 export function saveServers(servers) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(servers));
 }
 
-// Добавление нового сервера
 export function addServer(name, settings) {
   const servers = loadServers();
   const newServer = {
@@ -79,8 +66,6 @@ export function addServer(name, settings) {
   saveServers(servers);
   return newServer;
 }
-
-// Обновление сервера
 export function updateServer(serverId, updates) {
   const servers = loadServers();
   const index = servers.findIndex(s => s.id === serverId);
@@ -92,7 +77,6 @@ export function updateServer(serverId, updates) {
   return null;
 }
 
-// Удаление сервера
 export function deleteServer(serverId) {
   const servers = loadServers();
   const filtered = servers.filter(s => s.id !== serverId);
@@ -100,13 +84,11 @@ export function deleteServer(serverId) {
   return filtered;
 }
 
-// Получение сервера по ID
 export function getServer(serverId) {
   const servers = loadServers();
   return servers.find(s => s.id === serverId) || null;
 }
 
-// Загрузка сервера (возвращает настройки для начала игры)
 export function loadServer(serverId, callback) {
   const server = getServer(serverId);
   if (server && callback) {

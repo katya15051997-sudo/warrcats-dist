@@ -1,6 +1,6 @@
-import { cyclePeriod } from './day-night-cycle.js';
-import { levelUpRank, getRank } from './menu/xp-system.js';
-import { refreshActivePanel } from './menu/bottom-menu.js';
+import { cyclePeriod } from './systems/day-night-cycle.js';
+import { levelUpRank, getRank } from './systems/xp-system.js';
+import { refreshActivePanel } from './ui/bottom-menu.js';
 
 export const keys = { left: false, right: false, up: false, down: false, space: false };
 

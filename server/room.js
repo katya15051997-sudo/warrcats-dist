@@ -126,6 +126,10 @@ class Room {
         this._handleSparringReject(player, msg.payload.fromId);
         break;
 
+      case 'sparring_hit':
+        this._handleSparringHit(player, msg.payload.damage ?? 10);
+        break;
+
       case MSG.NEEDS_SYNC:
         // Клиент периодически сообщает актуальные потребности (для сохранения)
         player.h      = msg.payload.h      ?? player.h;
@@ -233,15 +237,43 @@ class Room {
     clearTimeout(initiator.sparringPending.timeoutHandle);
     initiator.sparringPending = null;
 
-    // Тратим энергию у обоих
-    initiator.e = Math.max(0, initiator.e - SPARRING_ENERGY_COST);
-    acceptor.e  = Math.max(0, acceptor.e  - SPARRING_ENERGY_COST);
+    // Запускаем спарринг со шкалами выносливости
+    // Сохраняем состояние активного спарринга
+    initiator.activeSparring = acceptor.id;
+    acceptor.activeSparring  = initiator.id;
 
-    // Оба получают уведомление — клиент сам начислит xp и прогресс приёма
-    this.broadcast({
-      type: MSG.SPARRING_DONE,
-      payload: { p1Id: fromId, p2Id: acceptor.id },
+    this._send(initiator.ws, {
+      type: 'sparring_start',
+      payload: { opponentId: acceptor.id, opponentName: acceptor.name },
     });
+    this._send(acceptor.ws, {
+      type: 'sparring_start',
+      payload: { opponentId: initiator.id, opponentName: initiator.name },
+    });
+  }
+
+  _handleSparringHit(from, damage) {
+    if (!from.activeSparring) return;
+    const opponent = this.players.get(from.activeSparring);
+    if (!opponent) return;
+
+    // Сообщаем сопернику что его ударили
+    this._send(opponent.ws, {
+      type: 'sparring_hit_me',
+      payload: { damage },
+    });
+    // Сообщаем атакующему что удар прошёл
+    this._send(from.ws, {
+      type: 'sparring_hit_opponent',
+      payload: { damage },
+    });
+  }
+
+  _endSparring(p1Id, p2Id) {
+    const p1 = this.players.get(p1Id);
+    const p2 = this.players.get(p2Id);
+    if (p1) { p1.activeSparring = null; p1.e = Math.max(0, (p1.e ?? 100) - 5); }
+    if (p2) { p2.activeSparring = null; p2.e = Math.max(0, (p2.e ?? 100) - 5); }
   }
 
   _handleSparringReject(rejector, fromId) {

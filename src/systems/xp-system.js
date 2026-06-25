@@ -13,9 +13,25 @@
 // которые нужно выполнить, чтобы приём считался изученным. Выученные приёмы
 // дают пассивные эффекты, применяемые в бою (см. applyMoveEffects).
 
-import { addMaxHealthBonus } from './character-profile.js';
-import { addMaxSleepBonus, gainEnergy } from './needs-system.js';
-import { getCharacterStorageKey } from './character-save.js';
+import { addMaxHealthBonus } from '../character/character-profile.js';
+import { getCharacterStorageKey } from '../character/character-save.js';
+
+// Ленивые геттеры для needs-system — разрывают круговую зависимость:
+// xp-system → needs-system → bottom-menu → xp-system
+function _needsSys() {
+  // Динамический require-like доступ через уже загруженный модуль
+  return import('./needs-system.js');
+}
+
+async function addMaxSleepBonus(amount, key) {
+  const m = await _needsSys();
+  m.addMaxSleepBonus(amount, key);
+}
+
+async function gainEnergy(amount) {
+  const m = await _needsSys();
+  m.gainEnergy(amount);
+}
 
 const STORAGE_KEY_BASE = 'warrcats_xp_system';
 
@@ -242,7 +258,8 @@ export function reloadForActiveCharacter() {
   applyRank3SleepBonusIfNeeded();
 }
 
-applyRank3SleepBonusIfNeeded();
+// Вызываем асинхронно — не блокируем инициализацию модуля
+setTimeout(() => applyRank3SleepBonusIfNeeded(), 0);
 
 function applyRank3SleepBonusIfNeeded() {
   if (getRank().lvl >= 3) {

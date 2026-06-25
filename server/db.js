@@ -12,6 +12,13 @@ const db = new Database(path.join(__dirname, '..', 'warrcats.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Миграция: добавить колонку email если её нет (для существующих баз)
+try {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+} catch (e) {
+  // Колонка уже существует — игнорируем ошибку
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Схема
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,6 +28,7 @@ db.exec(`
     id          TEXT PRIMARY KEY,
     username    TEXT UNIQUE NOT NULL,
     password    TEXT NOT NULL,           -- bcrypt-хэш
+    email       TEXT,
     created_at  INTEGER DEFAULT (strftime('%s','now'))
   );
 
@@ -63,23 +71,18 @@ db.exec(`
     text        TEXT,
     ts          INTEGER DEFAULT (strftime('%s','now'))
   );
-
-  -- Индексы (создаются один раз, ускоряют логин и выборку персонажей)
-  CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-  CREATE INDEX IF NOT EXISTS idx_chars_user_id  ON characters(user_id);
-  CREATE INDEX IF NOT EXISTS idx_chat_ts        ON chat_log(ts DESC);
 `);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Users
 // ─────────────────────────────────────────────────────────────────────────────
 
-const stmtUserInsert      = db.prepare('INSERT INTO users (id, username, password) VALUES (?, ?, ?)');
+const stmtUserInsert      = db.prepare('INSERT INTO users (id, username, password, email) VALUES (?, ?, ?, ?)');
 const stmtUserByUsername  = db.prepare('SELECT * FROM users WHERE username = ?');
 const stmtUserById        = db.prepare('SELECT id, username, created_at FROM users WHERE id = ?');
 
-function registerUser(id, username, passwordHash) {
-  stmtUserInsert.run(id, username, passwordHash);
+function registerUser(id, username, passwordHash, email = null) {
+  stmtUserInsert.run(id, username, passwordHash, email);
 }
 
 function getUserByUsername(username) {

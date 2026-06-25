@@ -9,10 +9,10 @@
 // - лиса возрождается через RESPAWN_DELAY_MS
 
 import * as PIXI from 'pixi.js';
-import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX } from './menu/xp-system.js';
-import { damageHealth, spendSleepForStrike } from './menu/needs-system.js';
-import { refreshActivePanel, getNeedValue } from './menu/bottom-menu.js';
-import { showToast } from './notify.js';
+import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX } from '../systems/xp-system.js';
+import { damageHealth, spendSleepForStrike } from '../systems/needs-system.js';
+import { refreshActivePanel, getNeedValue } from '../ui/bottom-menu.js';
+import { showToast } from '../ui/notify.js';
 
 const FOX_TEXTURE = '/assets/fox.png';
 const FOX_SCALE = 0.5;

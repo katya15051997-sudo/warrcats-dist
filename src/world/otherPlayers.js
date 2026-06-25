@@ -4,8 +4,10 @@
 // точно такой же как свой персонаж.
 
 import * as PIXI from 'pixi.js';
-import { getMyId } from './network.js';
-import { applyCharacterBuild, applyCharacterColors, applyEyeColor, setCharacterPose } from './menu/character.js';
+import { getMyId } from '../net/network.js';
+import { applyCharacterBuild, applyCharacterColors, applyEyeColor, setCharacterPose } from '../character/character.js';
+import { showContextMenu } from './world-objects.js';
+import { sendSparringInvite } from '../systems/sparring.js';
 
 const others = new Map(); // connId → { spine, nameText, hpBg, hpFill, name, targetX, targetY, facingLeft, h, max_h, walking }
 let _world    = null;
@@ -170,6 +172,21 @@ async function _createOther(p) {
   // HP
   const hpBg   = new PIXI.Graphics();
   const hpFill = new PIXI.Graphics();
+
+  // ПКМ по другому игроку — меню действий
+  spine.eventMode = 'static';
+  spine.cursor = 'pointer';
+  const pId   = p.id;
+  const pName = p.name ?? 'Без имени';
+  spine.on('rightclick', (e) => {
+    e.stopPropagation();
+    showContextMenu(e, [
+      {
+        label: '🥋 Пригласить на тренировку',
+        onClick: () => sendSparringInvite(pId, pName),
+      },
+    ]);
+  });
 
   _world.addChild(spine);
   _world.addChild(nameText);

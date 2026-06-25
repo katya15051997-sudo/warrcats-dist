@@ -15,17 +15,17 @@
 // Картинки объектов-спавнеров — в /assets/fon/<id>.png
 
 import * as PIXI from 'pixi.js';
-import { showContextMenu } from './world-objects.js';
+import { showContextMenu } from '../world/world-objects.js';
 import {
   addXp,
   progressMoveTasks,
   getDamageMultiplier,
   PLAYER_BASE_DAMAGE_MIN,
   PLAYER_BASE_DAMAGE_MAX,
-} from './menu/xp-system.js';
-import { spendSleepForStrike, gainFood } from './menu/needs-system.js';
-import { refreshActivePanel, getNeedValue } from './menu/bottom-menu.js';
-import { showToast } from './notify.js';
+} from './xp-system.js';
+import { spendSleepForStrike, gainFood } from './needs-system.js';
+import { refreshActivePanel, getNeedValue } from '../ui/bottom-menu.js';
+import { showToast } from '../ui/notify.js';
 
 // === Параметры видов дичи ===
 // food   — сколько % сытости даёт при поедании тушки

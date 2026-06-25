@@ -1,9 +1,9 @@
-import { currentSettings } from './menu.js';
-import { getProfile, getMaxHealth, getHealth, setHealth } from './character-profile.js';
-import { getCurrentPeriod, getTimeUntilNextPeriod } from '../day-night-cycle.js';
-import { getXp, getRank, RANKS, MOVES, getMoveState, isTierUnlocked, startLearningMove, getCalculatedDamage, getSelectedMoveId } from './xp-system.js';
-import { getMaxSleep } from './needs-system.js';
-import { getCharacterStorageKey } from './character-save.js';
+import { currentSettings } from '../config/game-settings.js';
+import { getProfile, getMaxHealth, getHealth, setHealth } from '../character/character-profile.js';
+import { getCurrentPeriod, getTimeUntilNextPeriod } from '../systems/day-night-cycle.js';
+import { getXp, getRank, RANKS, MOVES, getMoveState, isTierUnlocked, startLearningMove, getCalculatedDamage, getSelectedMoveId } from '../systems/xp-system.js';
+import { getMaxSleep } from '../systems/needs-system.js';
+import { getCharacterStorageKey } from '../character/character-save.js';
 import { injectGameStyles } from '../styles.js';
 
 const STORAGE_KEY_BASE = 'warrcats_needs_skills';
@@ -14,7 +14,6 @@ function getStorageKey() {
 
 const ICON_SRC = '/assets/knop.png';
 
-// Список вкладок (порядок соответствует макету)
 const TABS = [
   { id: 'needs',   label: 'Потребности и знания' },
   { id: 'about',   label: 'О котике' },
@@ -23,8 +22,6 @@ const TABS = [
   { id: 'info',    label: 'Личная информация' },
 ];
 
-// Текущие значения потребностей (0-100%, кроме "Сон" — у него динамический максимум, см. getNeedMax)
-// Можно менять извне через setNeedValue()
 const needs = [
   { key: 'h', icon: '', label: 'Здоровье',         value: 100 },
   { key: 'food', icon: '', label: 'Сытость',          value: 80  },
@@ -34,17 +31,13 @@ const needs = [
   { key: 'ss', icon: '', label: 'Цап-царап',   value: 50  },
 ];
 
-// Значения по умолчанию (для сброса при смене персонажа, до загрузки
-// сохранённых данных нового персонажа)
 const DEFAULT_NEED_VALUES = needs.reduce((acc, n) => { acc[n.key] = n.value; return acc; }, {});
 
-// Текущие значения умений (Сила заменена системой опыта/званий — см. renderSkills).
 const skills = [
   { key: 'smell', icon: '', label: 'Нюх', value: 0, max: 100 },
   { key: 'healing',  icon: '✨', label: 'Целительство',  value: 0, max: 100 },
 ];
 
-// Подвкладки внутри "О персонаже"
 const ABOUT_SUBTABS = [
   { id: 'character', label: 'Ваш котик' },
   { id: 'inventory', label: 'Инвентарь' },
@@ -53,9 +46,8 @@ const ABOUT_SUBTABS = [
 
 let activeAboutSubTab = 'character';
 
-// Подвкладка внутри "Потребности и умения": 'needs' | 'skills'
 let activeNeedsSubTab = 'needs';
-// Развёрнутость аккордеонов боевых приёмов (по тиру)
+
 const expandedTiers = { 1: false, 2: false };
 
 let barContainer = null;
@@ -63,15 +55,13 @@ let panelContainer = null;
 let activeTabId = null;
 let stylesInjected = false;
 
-// === Публичные функции ===
-
 export function initBottomMenu() {
   if (barContainer) return;
 
   loadNeedsAndSkills();
 
-  // Здоровье персонажа — берём сохранённое значение из профиля
-  // (изначально 30/30, дальше растёт вместе с лунами и пассивным лечением)
+  
+  
   const healthNeed = needs.find(n => n.key === 'h');
   if (healthNeed) {
     healthNeed.value = getHealth();
@@ -98,10 +88,10 @@ export function initBottomMenu() {
 
   document.body.appendChild(barContainer);
 
-  // Закрытие панели по клику вне её и вне меню
+  
   document.addEventListener('mousedown', handleOutsideClick);
   
-  // Закрытие панели по нажатию ESC
+  
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && panelContainer) {
       closePanel();
@@ -118,9 +108,6 @@ export function hideBottomMenu() {
   document.removeEventListener('mousedown', handleOutsideClick);
 }
 
-// Максимальное значение потребности.
-// Для "Здоровья" — текущий "потолок" персонажа (растёт +4% каждые 3 луны,
-// для "Сон"/бодрости — динамический потолок, растущий с уровнями силы)
 function getNeedMax(need) {
   if (need.key === 'h') {
     return getMaxHealth();
@@ -131,14 +118,13 @@ function getNeedMax(need) {
   return 100;
 }
 
-// Обновить значение конкретной потребности и перерисовать,если открыта панель "Потребности и умения"
 export function setNeedValue(key, value) {
   const need = needs.find(n => n.key === key);
   if (!need) return;
   const max = getNeedMax(need);
   need.value = Math.max(0, Math.min(max, value));
 
-  // Здоровье персистится в профиле персонажа (сохраняется между сессиями)
+  
   if (key === 'h') {
     setHealth(need.value);
   }
@@ -147,14 +133,11 @@ export function setNeedValue(key, value) {
   refreshActivePanel();
 }
 
-// Получить текущее значение потребности (0-100) или null, если не найдена
 export function getNeedValue(key) {
   const need = needs.find(n => n.key === key);
   return need ? need.value : null;
 }
 
-// Максимальное значение умения.
-// Для "Силы" — берётся из настроек сервера (maxStrength).
 function getSkillMax(skill) {
   if (skill.key === 'strength') {
     return currentSettings?.maxStrength ?? 50;
@@ -196,10 +179,6 @@ function saveNeedsAndSkills() {
   }
 }
 
-// Перечитать потребности и умения из localStorage для текущего активного
-// персонажа. Сбрасывает значения к умолчаниям, затем загружает сохранённые
-// (если есть), и синхронизирует "Здоровье" с профилем персонажа.
-// Вызывать при смене активного персонажа / перед стартом игры.
 export function reloadForActiveCharacter() {
   needs.forEach(n => { n.value = DEFAULT_NEED_VALUES[n.key]; });
   skills.forEach(s => { s.value = 0; });
@@ -214,7 +193,6 @@ export function reloadForActiveCharacter() {
   refreshActivePanel();
 }
 
-// Установить значение умения (ограничивается [0, max]) и перерисовать, если открыта панель "Потребности и умения"
 export function setSkillValue(key, value) {
   const skill = skills.find(s => s.key === key);
   if (!skill) return;
@@ -225,27 +203,22 @@ export function setSkillValue(key, value) {
   refreshActivePanel();
 }
 
-// Прибавить (или вычесть, при отрицательном delta) значение умения
 export function addSkillValue(key, delta) {
   const skill = skills.find(s => s.key === key);
   if (!skill) return;
   setSkillValue(key, skill.value + delta);
 }
 
-// Получить текущее значение умения или null, если не найдено
 export function getSkillValue(key) {
   const skill = skills.find(s => s.key === key);
   return skill ? skill.value : null;
 }
 
-// Перерисовать содержимое текущей открытой вкладки панели
 export function refreshActivePanel() {
   if (!panelContainer) return;
   const content = panelContainer.querySelector('.bottom-menu-panel-content');
   if (content) renderAndBindTabContent(activeTabId, content);
 }
-
-// === Внутренняя логика ===
 
 function handleOutsideClick(e) {
   if (!panelContainer) return;
@@ -286,7 +259,7 @@ function openPanel(tabId) {
   panelContainer.querySelector('.bottom-menu-panel-close')
     .addEventListener('click', closePanel);
 
-  // Подсветка активной кнопки
+  
   barContainer.querySelectorAll('.bottom-menu-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tabId === tabId);
   });
@@ -317,12 +290,10 @@ function renderTabContent(tabId) {
   if (tabId === 'map') {
     return renderMapTab();
   }
-  // Остальные вкладки пока пусты
+  
   return `<div class="bottom-menu-empty">Раздел в разработке...</div>`;
 }
 
-// Отрисовать содержимое вкладки в переданный контейнер и привязать
-// обработчики/таймеры (подвкладки "О персонаже", таймер вкладки "Карта")
 function renderAndBindTabContent(tabId, contentEl) {
   contentEl.innerHTML = renderTabContent(tabId);
 
@@ -341,8 +312,6 @@ function renderAndBindTabContent(tabId, contentEl) {
   }
 }
 
-// Рендер карточек приёмов одного тира (1 — Оруженосец, 2 — Воитель).
-// Возвращает заметку о блокировке (если тир ещё не открыт) + карточки в столбик.
 function renderMoveTier(tier) {
   const unlocked = isTierUnlocked(tier);
   const lockNote = unlocked ? '' : `<div class="moves-lock-note">Достигни звания ${tier === 1 ? 'Оруженосец' : 'Воитель'}, чтобы изучать эти приёмы</div>`;
@@ -400,7 +369,6 @@ function renderMoveTier(tier) {
   return `${lockNote}<div class="moves-grid">${cards}</div>`;
 }
 
-// Аккордеон одного уровня приёмов: заголовок-переключатель + тело (карточки).
 function renderMoveAccordion(tier, label) {
   const open = expandedTiers[tier];
   return `
@@ -416,8 +384,6 @@ function renderMoveAccordion(tier, label) {
   `;
 }
 
-// Привязать обработчики вкладки "Потребности и умения":
-// переключение подвкладок, аккордеоны приёмов и клик по карточке (начать обучение).
 function bindNeedsTabHandlers(contentEl) {
   contentEl.querySelectorAll('.ns-subtab').forEach(el => {
     el.addEventListener('click', () => {
@@ -428,7 +394,7 @@ function bindNeedsTabHandlers(contentEl) {
 
   contentEl.querySelectorAll('.moves-acc-header').forEach(el => {
     el.addEventListener('click', () => {
-      const tier = Number(el.dataset.tier);
+      const tier = el.dataset.tier === 'buffs' ? 'buffs' : Number(el.dataset.tier);
       expandedTiers[tier] = !expandedTiers[tier];
       renderAndBindTabContent('needs', contentEl);
     });
@@ -444,8 +410,6 @@ function bindNeedsTabHandlers(contentEl) {
   });
 }
 
-// Вкладка "Карта": текущее время суток и обратный отсчёт до смены.
-// Сама карта пока не реализована.
 function renderMapTab() {
   const period = getCurrentPeriod();
   const remainingLabel = formatDuration(getTimeUntilNextPeriod());
@@ -459,7 +423,6 @@ function renderMapTab() {
   `;
 }
 
-// Форматирует миллисекунды как "MM:SS"
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -467,7 +430,6 @@ function formatDuration(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 } 
 
-// Таймер обратного отсчёта для вкладки "Карта" (обновляет панель раз в секунду)
 let mapTickIntervalId = null;
 
 function startMapTicker() {
@@ -484,7 +446,6 @@ function stopMapTicker() {
   }
 }
 
-// Привязать клики по подвкладкам "О персонаже" / "Инвентарь" / "Племя"
 function bindAboutSubTabHandlers(contentEl) {
   contentEl.querySelectorAll('.about-subtab').forEach(el => {
     el.addEventListener('click', () => {
@@ -494,7 +455,6 @@ function bindAboutSubTabHandlers(contentEl) {
   });
 }
 
-// Рендер вкладки "О персонаже": переключатель подвкладок + содержимое
 function renderAboutTab() {
   return `
     <div class="about-subtabs">
@@ -514,12 +474,10 @@ function renderAboutSubTabContent(subTabId) {
   if (subTabId === 'character') {
     return renderCharacterInfo();
   }
-  // "Инвентарь" и "Племя" пока пустые
+  
   return `<div class="bottom-menu-empty">Раздел в разработке...</div>`;
 }
 
-// Подвкладка "О персонаже": Имя, Племя, Должность, Возраст, Здоровье,
-// Родители, Пара, Котята
 function renderCharacterInfo() {
   const profile = getProfile();
 
@@ -551,7 +509,6 @@ function renderCharacterInfo() {
   `;
 }
 
-// Простая русская плюрализация для "луна / луны / лун"
 function moonLabel(n) {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -561,14 +518,11 @@ function moonLabel(n) {
   return 'лун';
 }
 
-// Расчётный диапазон урона персонажа (с учётом множителя звания),
-// для строки "Урон" во вкладке "О персонаже"
 function formatDamageRange() {
   const { min, max } = getCalculatedDamage();
   return min === max ? `${min}` : `${min} – ${max}`;
 }
 
-// Вкладка "Потребности и умения" = две подвкладки: Потребности | Умения.
 function renderNeedsAndSkills() {
   return `
     <div class="ns-subtabs">
@@ -581,7 +535,6 @@ function renderNeedsAndSkills() {
   `;
 }
 
-// Подвкладка "Потребности": на шкале — реальное значение/максимум, справа — проценты 0-100.
 function renderNeeds() {
   return `
     <div class="needs-list">
@@ -606,8 +559,6 @@ function renderNeeds() {
   `;
 }
 
-// Подвкладка "Умения": сверху "Боевые умения" (текущее звание + прогресс),
-// ниже блок "Боевые приёмы" с двумя аккордеонами (Оруженосец / Воитель).
 function renderSkillsSubTab() {
   const rank = getRank();
   const xp = getXp();
@@ -615,6 +566,8 @@ function renderSkillsSubTab() {
   const pct = isMax ? 100 : Math.min(100, ((xp - rank.min) / (rank.max - rank.min)) * 100);
   const xpLabel = isMax ? `${xp} xp (макс.)` : `${xp} / ${rank.max} xp`;
   const tooltip = `Сила удара: x${rank.dam.toFixed(1)} · Бонус: ${rank.bonus}`;
+
+  const buffsHtml = renderBuffsAccordion(rank);
 
   return `
     <div class="combat-skill">
@@ -630,15 +583,57 @@ function renderSkillsSubTab() {
       <div class="moves-block-title">Боевые приёмы</div>
       ${renderMoveAccordion(1, 'Уровень Оруженосца')}
       ${renderMoveAccordion(2, 'Уровень Воителя')}
+      ${buffsHtml}
     </div>
   `;
 }
 
+const ALL_BUFFS = [
+  { name: 'Урон x1.5',        icon: '⚔️', moveId: 'm1', tooltip: 'Приём «Удар сзади»: шанс 35% — следующий удар наносит в 1.5 раза больше урона.' },
+  { name: 'Кровотечение',      icon: '🩸', moveId: 'm2', tooltip: 'Приём «Прочёс живота»: шанс 5% — противник теряет 8 HP за 2 секунды.' },
+  { name: 'Оглушение',         icon: '💫', moveId: 'm3', tooltip: 'Приём «Удар передней лапой»: шанс 2% — противник не может атаковать 3 секунды.' },
+  { name: 'Царапина',          icon: '🐾', moveId: 'm4', tooltip: 'Приём «Скользящий удар»: шанс 10% — противник теряет 10 HP за 5 секунд.' },
+  { name: 'Иммобилизация',     icon: '🔒', moveId: 'm5', tooltip: 'Приём «Мёртвая хватка»: захват шеи зубами, противник обездвижен на 2 секунды.' },
+  { name: 'Прыжок +25%',      icon: '🐆', moveId: 'm6', tooltip: 'Приём «Прыжок с зацепом»: высота прыжка увеличена на 25%, выше шанс запрыгнуть на противника.' },
+  { name: 'Дезориентация',     icon: '🌀', moveId: 'm7', tooltip: 'Приём «Встряска»: защита противника снижается на 20% на 3 секунды.' },
+  { name: 'Урон x2.2 + стан', icon: '💥', moveId: 'm8', tooltip: 'Приём «Вертикальный бросок»: бросок вверх — урон x2.2 и оглушение противника на 1 секунду.' },
+  { name: 'Отброс x1.5',      icon: '🌪️', moveId: 'm9', tooltip: 'Приём «Бросок на плечи»: дальность отбрасывания противника увеличена в 1.5 раза.' },
+  { name: 'Контратака 30%',   icon: '🔄', moveId: 'm10', tooltip: 'Приём «Перекатывание»: шанс 30% — после уклонения наносится контратака с уроном x1.2.' },
+];
 
-// Для большинства потребностей высокое значение — хорошо (зелёный),
-// низкое — плохо (красный). Для "нужды" логика обратная:
-// высокое значение — плохо (нужно справить нужду).
-// pct — значение потребности в процентах от её максимума (0-100).
+function renderBuffsAccordion(rank) {
+  const open = expandedTiers['buffs'];
+  const headerCls = open ? 'open' : '';
+
+  
+  const body = ALL_BUFFS.map(b => {
+    const learned = b.moveId ? isMoveLearned(b.moveId) : false;
+    const cls = learned ? 'buff-chip active' : 'buff-chip dimmed';
+    const lockHint = learned ? '' : '<span class="buff-lock">🔒</span>';
+    return `
+      <div class="${cls}">
+        <span class="buff-icon">${b.icon}</span>
+        <span class="buff-name">${b.name}</span>
+        ${lockHint}
+        <span class="buff-hint">?</span>
+        <div class="buff-tooltip">${b.tooltip}${learned ? '' : '<br><span style=\'color:#c9bda0;font-size:10px;\'>Изучи приём, чтобы получить этот бафф</span>'}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="moves-acc">
+      <div class="moves-acc-header ${headerCls}" data-tier="buffs">
+        <span class="moves-acc-arrow">${open ? '▾' : '▸'}</span>
+        <span>Все баффы</span>
+      </div>
+      <div class="moves-acc-body" ${open ? '' : 'hidden'}>
+        <div class="buffs-grid">${body}</div>
+      </div>
+    </div>
+  `;
+}
+
 function getBarColor(need, pct) {
   if (need.key === 'toilet') {
     if (pct > 60) return '#952424';

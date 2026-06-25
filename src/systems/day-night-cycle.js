@@ -4,7 +4,7 @@
 // Клавиша P переключает период вручную (см. input.js).
 
 import * as PIXI from 'pixi.js';
-import { showToast } from './notify.js';
+import { showToast } from '../ui/notify.js';
 
 // Высота области "неба" в верхней части карты
 export const SKY_HEIGHT = 400;
@@ -48,7 +48,15 @@ let skySprites = [];
 let background = null;
 let skyWidth = 0;
 let currentIndex = 0;
-let periodStartTime = Date.now();
+// Признак того, что период задан сервером (тогда локальный таймер не нужен —
+// сменой управляет сервер через setPeriod). Если сервер недоступен (соло),
+// используем вычисление из абсолютного времени.
+let serverControlled = false;
+
+// Индекс периода из абсолютного реального времени (как на сервере)
+function computePeriodIndexFromClock() {
+  return Math.floor(Date.now() / PERIOD_DURATION_MS) % PERIODS.length;
+}
 
 //
 // ВАЖНО: вызывать ДО world.addChild(LargeFloor), чтобы небо оказалось
@@ -57,9 +65,9 @@ export async function createDayNightOverlay(world, worldWidth, backgroundDisplay
   skyWidth = worldWidth;
   background = backgroundDisplayObject ?? null;
 
-  // Сбрасываем цикл при каждом новом старте игры
-  currentIndex = 0;
-  periodStartTime = Date.now();
+  // Начальный период вычисляем из абсолютного времени — он не обнуляется
+  // при старте игры и совпадает с серверным.
+  currentIndex = computePeriodIndexFromClock();
 
   skyContainer = new PIXI.Container();
   world.addChild(skyContainer);
@@ -109,26 +117,35 @@ function applyGroundTint(target, color) {
   }
 }
 
-// Вызывать каждый кадр (app.ticker) — автоматически переключает период,
-// когда истекает PERIOD_DURATION_MS реального времени
+// Вызывать каждый кадр (app.ticker). Если периодом управляет сервер
+// (мультиплеер) — ничего не делаем, ждём сообщений day_period. Иначе
+// (соло) сами вычисляем период из абсолютного времени.
 export function updateDayNightCycle() {
-  const now = Date.now();
-  if (now - periodStartTime >= PERIOD_DURATION_MS) {
-    setPeriod(currentIndex + 1);
+  if (serverControlled) return;
+  const idx = computePeriodIndexFromClock();
+  if (idx !== currentIndex) {
+    currentIndex = idx;
+    redraw();
+    showToast(PERIODS[currentIndex].label);
   }
 }
 
-// Установить период по индексу (с зацикливанием) и перерисовать оверлей
+// Установить период по индексу (с зацикливанием) и перерисовать оверлей.
+// Вызывается из main.js при получении day_period от сервера — это помечает
+// цикл как управляемый сервером.
 export function setPeriod(index) {
+  serverControlled = true;
   currentIndex = ((index % PERIODS.length) + PERIODS.length) % PERIODS.length;
-  periodStartTime = Date.now();
   redraw();
   showToast(PERIODS[currentIndex].label);
 }
 
-// Переключить на следующий период вручную (клавиша P)
+// Переключить на следующий период вручную (клавиша P) — только для соло/отладки
 export function cyclePeriod() {
-  setPeriod(currentIndex + 1);
+  serverControlled = false;
+  currentIndex = (currentIndex + 1) % PERIODS.length;
+  redraw();
+  showToast(PERIODS[currentIndex].label);
 }
 
 // Текущий период (для отображения во вкладке "Карта" и т.п.)
@@ -136,10 +153,11 @@ export function getCurrentPeriod() {
   return PERIODS[currentIndex];
 }
 
-// Сколько миллисекунд осталось до смены текущего периода на следующий
+// Сколько миллисекунд осталось до смены текущего периода на следующий.
+// Считается от абсолютного времени, чтобы совпадать с реальным расписанием.
 export function getTimeUntilNextPeriod() {
-  const elapsed = Date.now() - periodStartTime;
-  return Math.max(0, PERIOD_DURATION_MS - elapsed);
+  const elapsedInPeriod = Date.now() % PERIOD_DURATION_MS;
+  return Math.max(0, PERIOD_DURATION_MS - elapsedInPeriod);
 }
 
 // Длительность одного периода (мс) — на случай если понадобится извне

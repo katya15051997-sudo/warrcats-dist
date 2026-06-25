@@ -16,8 +16,15 @@ class GameLoop {
     this.room = room;
     this._tickInterval  = null;
     this._preyInterval  = null;
-    this._periodIndex   = 0;
-    this._periodStart   = Date.now();
+    // Период вычисляется из абсолютного реального времени (Unix epoch),
+    // поэтому НЕ обнуляется при перезапуске сервера и одинаков для всех клиентов.
+    this._periodIndex   = this._computePeriodIndex();
+  }
+
+  // Индекс периода (0..3) из абсолютного времени.
+  // 1 период = 1.5 реальных часа, 4 периода = 6 ч = 1 игровой день.
+  _computePeriodIndex() {
+    return Math.floor(Date.now() / PERIOD_MS) % PERIODS.length;
   }
 
   start() {
@@ -35,11 +42,12 @@ class GameLoop {
   _tick() {
     const room = this.room;
 
-    // Проверяем смену суток
-    if (Date.now() - this._periodStart >= PERIOD_MS) {
-      this._periodIndex = (this._periodIndex + 1) % PERIODS.length;
-      this._periodStart = Date.now();
-      room.broadcast({ type: MSG.DAY_PERIOD, payload: { period: PERIODS[this._periodIndex] } });
+    // Смена суток: вычисляем индекс из абсолютного времени.
+    // Если он изменился с прошлого тика — рассылаем новый период.
+    const idx = this._computePeriodIndex();
+    if (idx !== this._periodIndex) {
+      this._periodIndex = idx;
+      room.broadcast({ type: MSG.DAY_PERIOD, payload: { period: PERIODS[idx] } });
     }
 
     // Рассылаем снапшот позиций всех игроков
@@ -59,7 +67,7 @@ class GameLoop {
   }
 
   getCurrentPeriod() {
-    return PERIODS[this._periodIndex];
+    return PERIODS[this._computePeriodIndex()];
   }
 }
 

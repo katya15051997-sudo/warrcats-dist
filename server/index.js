@@ -77,29 +77,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── POST /api/register ──────────────────────────────────────────────────────
+  // Регистрация временно закрыта
   if (url === '/api/register' && req.method === 'POST') {
-    const { username, password } = await readBody(req);
-
-    if (!username || !password)
-      return send(res, 400, { error: 'username и password обязательны' });
-
-    if (username.length < 2 || username.length > 24)
-      return send(res, 400, { error: 'username: от 2 до 24 символов' });
-
-    if (password.length < 4)
-      return send(res, 400, { error: 'Пароль: минимум 4 символа' });
-
-    // Проверяем, не занято ли имя
-    if (db.getUserByUsername(username))
-      return send(res, 409, { error: 'Это имя уже занято' });
-
-    const hash   = await bcrypt.hash(password, 10);
-    const userId = genId('u');
-    db.registerUser(userId, username, hash);
-
-    const token = jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '30d' });
-    console.log(`[auth] зарегистрирован: ${username} (${userId})`);
-    return send(res, 200, { token, userId, username });
+    return send(res, 403, { error: 'Регистрация временно закрыта' });
   }
 
   // ── POST /api/login ─────────────────────────────────────────────────────────
