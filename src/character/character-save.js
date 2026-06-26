@@ -7,9 +7,9 @@ let _activeId   = null;
 
 function _enrich(char) {
   if (!char || typeof char !== 'object') return char;
-  if (char.appearance !== undefined && char.app === undefined)        char.app = char.appearance;
-  if (char.age_moons   !== undefined && char.age === undefined)        char.age = char.age_moons;
-  if (char.max_h       !== undefined && char.maxHealth === undefined)  char.maxHealth = char.max_h;
+  if (char.appearance !== undefined && char.app === undefined)       char.app = char.appearance;
+  if (char.age_moons  !== undefined && char.age === undefined)       char.age = char.age_moons;
+  if (char.max_h      !== undefined && char.maxHealth === undefined) char.maxHealth = char.max_h;
   return char;
 }
 
@@ -38,10 +38,6 @@ export async function loadCharactersFromServer() {
 
 export function getCharacters() {
   return _characters.slice();
-}
-
-export function loadCharacters() {
-  return getCharacters();
 }
 
 export function getActiveCharacter() {
@@ -76,33 +72,43 @@ export function setActiveCharacter(charOrId) {
 
 export async function createCharacter(data) {
   const res  = await apiPost('/api/characters', data);
-  const char = _enrich(res.character || res);
-  _characters.push(char);
-  setActiveCharacter(char.id);
+  const char = _enrich(res.character ?? res);
+
+  if (!char?.id) throw new Error('Сервер не вернул персонажа');
+
+  const existing = _characters.findIndex(c => c.id === char.id);
+  if (existing >= 0) _characters[existing] = char;
+  else _characters.push(char);
+
+  _activeId = char.id;
+  localStorage.setItem(ACTIVE_ID_KEY, char.id);
+
   return char;
 }
 
 export async function updateCharacterAppearance(charId, data) {
   const res  = await apiPost('/api/characters', { ...data, id: charId });
-  const char = _enrich(res.character || res);
-  const idx  = _characters.findIndex(c => c.id === charId);
+  const char = _enrich(res.character ?? res);
+
+  const idx = _characters.findIndex(c => c.id === charId);
   if (idx >= 0) _characters[idx] = char;
   else _characters.push(char);
-  return char;
-}
 
-export async function saveCharacter(data) {
-  if (data?.id && _characters.some(c => c.id === data.id)) {
-    return updateCharacterAppearance(data.id, data);
-  }
-  return createCharacter(data);
+  return char;
 }
 
 export async function deleteCharacter(id) {
   try { await apiDelete(`/api/characters/${id}`); }
   catch (e) { console.warn('Не удалось удалить персонажа:', e.message); }
+
   _characters = _characters.filter(c => c.id !== id);
-  if (_activeId === id) setActiveCharacter(_characters[0]?.id ?? null);
+
+  if (_activeId === id) {
+    _activeId = _characters[0]?.id ?? null;
+    if (_activeId) localStorage.setItem(ACTIVE_ID_KEY, _activeId);
+    else localStorage.removeItem(ACTIVE_ID_KEY);
+  }
+
   return getCharacters();
 }
 
@@ -119,7 +125,7 @@ export function patchActiveState(partial) {
 }
 
 export function replaceActiveCharacter(char) {
-  if (!char || !char.id) return null;
+  if (!char?.id) return null;
   _enrich(char);
   const idx = _characters.findIndex(c => c.id === char.id);
   if (idx >= 0) _characters[idx] = char;
@@ -133,12 +139,12 @@ export function getCurrentStateSnapshot() {
   const a = getActiveCharacter();
   if (!a) return null;
   return {
-    h: a.h, max_h: a.max_h, max_health: a.max_health,
+    h: a.h, max_h: a.max_h,
     e: a.e, food: a.food, thirst: a.thirst, ss: a.ss, toilet: a.toilet,
     xp: a.xp,
-    move_states: a.move_states,
-    sleep_bonuses: a.sleep_bonuses,
-    age_moons: a.age_moons,
+    move_states:   a.move_states,
+    need_bonuses:  a.need_bonuses,
+    age_moons:     a.age_moons,
     last_moon_update: a.last_moon_update,
     parents: a.parents, mate: a.mate, kittens: a.kittens,
     inventory: a.inventory, achievements: a.achievements,

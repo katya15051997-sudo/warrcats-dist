@@ -4,21 +4,16 @@ import { setupInput, keys, setStrikeHandler } from './input.js';
 import { LargeFloor, loadBackground } from './fon/textures.js';
 import { currentSettings } from './config/game-settings.js';
 import { showInGameMenu, hideInGameMenu } from './ui/ingame-menu.js';
-import { initBottomMenu, hideBottomMenu, getNeedValue } from './ui/bottom-menu.js';
-import { startNeedsSystem, stopNeedsSystem } from './systems/needs-system.js';
+import { initBottomMenu, hideBottomMenu, refreshActivePanel } from './ui/bottom-menu.js';
+import { startNeedsSystem, stopNeedsSystem, getNeed, syncAge, reloadForActiveCharacter as reloadPlayerSystem, gainFood, damageHealth, spendEnergyForStrike } from './systems/player-system.js';
+import { reloadForActiveCharacter as reloadSkills, progressMoveTasks, addXp } from './systems/skills.js';
 import { createWorldObjects, stopActiveAction, isActionActive } from './world/world-objects.js';
 import { createPreySystem, updatePreySystem, strikeNearestPrey } from './systems/prey-system.js';
 import { createFoxEnemy, strikeFox, getFoxPosition, FOX_STRIKE_RADIUS } from './world/enemy-fox.js';
 import { setupCharacterActions, updateCharacterActions, resetCharacterPose } from './character/character-actions.js';
-import { syncAge, reloadForActiveCharacter as reloadProfile } from './character/character-profile.js';
-import { reloadForActiveCharacter as reloadXpSystem } from './systems/xp-system.js';
-import { reloadForActiveCharacter as reloadNeedsSystem } from './systems/needs-system.js';
-import { reloadForActiveCharacter as reloadNeedsAndSkills } from './ui/bottom-menu.js';
 import { createDayNightOverlay, updateDayNightCycle, setPeriod } from './systems/day-night-cycle.js';
 import { applyCharacterData } from './character/character.js';
 import { getActiveCharacter } from './character/character-save.js';
-import { progressMoveTasks, addXp } from './systems/xp-system.js';
-import { spendSleepForStrike, gainFood } from './systems/needs-system.js';
 import { showToast } from './ui/notify.js';
 import {
   initSparring, setSparringCharSprite,
@@ -26,10 +21,7 @@ import {
   handleSparringHit, handleSparringOpponentHit,
   handleSparringEnd, isSparringActive, sparringStrike,
 } from './systems/sparring.js';
-import { refreshActivePanel } from './ui/bottom-menu.js';
-
 import { initLanding } from './ui/landing.js';
-
 import {
   connect, disconnect, send, on as netOn,
   getMyId, isConnected, setNeedsGetter,
@@ -40,8 +32,8 @@ import {
 } from './world/otherPlayers.js';
 import { initChat, receiveMessage, loadHistory, hideChatOverlay, showChatOverlay } from './ui/chat.js';
 
-const MOVE_SEND_MS   = 50;  
-const PERIOD_SYNC_MS = 500; 
+const MOVE_SEND_MS   = 50;
+const PERIOD_SYNC_MS = 500;
 
 ;(async () => {
   const app = new PIXI.Application({
@@ -51,14 +43,10 @@ const PERIOD_SYNC_MS = 500;
 
   document.getElementById('pixi-container').appendChild(app.view);
 
-  
   window.startGameCallback = (serverId, serverSettings) => {
     startGame(app, serverSettings ?? {});
   };
 
-  
-  // Возврат из игры в главное меню — заново показываем лендинг.
-  // initLanding идемпотентен: повторно стили/DOM не задвоит.
   window.showGameMenu = () => initLanding(window.startGameCallback);
 
   await initLanding(window.startGameCallback);
@@ -74,16 +62,12 @@ async function startGame(app, settings) {
     _activeTicker = null;
   }
 
-  
   disconnect();
-
   app.stage.removeChildren();
 
   try {
-    reloadProfile();
-    reloadXpSystem();
-    reloadNeedsSystem();
-    reloadNeedsAndSkills();
+    reloadPlayerSystem();
+    reloadSkills();
 
     await loadBackground();
 
@@ -97,16 +81,15 @@ async function startGame(app, settings) {
     startNeedsSystem();
     syncAge();
 
-    const SPEED     = 5;
-    const AIR_SPEED = 4.5;
-    const GRAVITY   = 0.5;
+    const SPEED      = 5;
+    const AIR_SPEED  = 4.5;
+    const GRAVITY    = 0.5;
     const JUMP_POWER = -10;
     let verticalVelocity = 0;
-    let isGrounded   = true;
-    let originalGroundY = null;
-    let jumpRequested   = false;
+    let isGrounded       = true;
+    let originalGroundY  = null;
+    let jumpRequested    = false;
 
-    
     const world = new PIXI.Container();
     app.stage.addChild(world);
 
@@ -129,7 +112,6 @@ async function startGame(app, settings) {
     const WORLD_WIDTH  = LargeFloor.width;
     const WORLD_HEIGHT = LargeFloor.height;
 
-    
     await createPreySystem(world, {
       minX: 100, maxX: WORLD_WIDTH - 100,
       minY: 100, maxY: WORLD_HEIGHT - 100,
@@ -137,7 +119,6 @@ async function startGame(app, settings) {
 
     await createFoxEnemy(world);
 
-    
     setStrikeHandler(() => {
       const active = idleChar;
       if (!active) return;
@@ -158,7 +139,6 @@ async function startGame(app, settings) {
         }
       }
 
-      
       const foxPos = getFoxPosition();
       if (foxPos) {
         const dx = foxPos.x - active.x;
@@ -169,7 +149,6 @@ async function startGame(app, settings) {
         }
       }
 
-      
       const hit = strikeNearestPrey(active.x, active.y);
       if (hit) {
         send('strike', { type: 'prey', x: active.x, y: active.y });
@@ -178,62 +157,45 @@ async function startGame(app, settings) {
 
     setupCharacterActions(world, [idleChar]);
 
-    
     await initOtherPlayers(world);
     initSparring(world, app, idleChar);
 
-    
     initChat();
 
-    
-
-    
     netOn('init', ({ myId, players, prey, period, chat }) => {
       console.log(`[net] я — игрок #${myId}, в комнате ${players.length} игроков`);
       applySnapshot(players);
 
-      
-
-      
       if (period) {
         const periodMap = { morning: 0, day: 1, evening: 2, night: 3 };
         if (periodMap[period] !== undefined) setPeriod(periodMap[period]);
       }
 
-      
       if (chat?.length) loadHistory(chat);
 
       showToast('✅ Подключено к серверу', { duration: 2000 });
     });
 
-    
     netOn('state', (players) => {
       applySnapshot(players);
     });
 
-    
     netOn('player_join', (playerData) => {
       addOtherPlayer(playerData);
       showToast(`${playerData.name} вошёл на сервер`);
     });
 
-    
     netOn('player_leave', ({ id }) => {
       removeOtherPlayer(id);
     });
 
-    
     netOn('strike_result', ({ attackerId, targetId, damage }) => {
-      const myId = getMyId();
-      if (targetId === myId) {
-        
+      if (targetId === getMyId()) {
         showToast(`⚔️ Тебя ударили! −${damage} здоровья`, { duration: 2000, fontSize: 14 });
-        
-        import('./systems/needs-system.js').then(m => m.damageHealth(damage));
+        damageHealth(damage);
       }
     });
 
-    
     netOn('self_strike_res', ({ preyKilled, food }) => {
       if (preyKilled && food) {
         gainFood(food);
@@ -241,87 +203,64 @@ async function startGame(app, settings) {
       }
     });
 
-    
     netOn('chat_msg', receiveMessage);
+
     netOn('sparring_cancel', ({ reason }) => {
-      const msg = reason === 'timeout' ? 'Время вышло — тренировка отменена'
-                                       : 'Тренировка отклонена';
-      showToast(msg, { fontSize: 14 });
+      showToast(reason === 'timeout' ? 'Время вышло — тренировка отменена' : 'Тренировка отклонена', { fontSize: 14 });
       handleSparringEnd();
     });
 
-    
     netOn('sparring_req', ({ fromId, fromName }) => {
       handleSparringInvite(fromId, fromName, idleChar);
     });
 
-    
     netOn('sparring_start', ({ opponentId, opponentName }) => {
-      const opSprite = getOtherSprite(opponentId);
-      startSparring(opponentId, opponentName, opSprite);
+      startSparring(opponentId, opponentName, getOtherSprite(opponentId));
     });
 
-    
-    netOn('sparring_hit_me', ({ damage }) => {
-      handleSparringHit(damage);
-    });
+    netOn('sparring_hit_me',       ({ damage }) => handleSparringHit(damage));
+    netOn('sparring_hit_opponent', ({ damage }) => handleSparringOpponentHit(damage));
 
-    
-    netOn('sparring_hit_opponent', ({ damage }) => {
-      handleSparringOpponentHit(damage);
-    });
-
-    
     netOn('prey_killed', ({ preyId, killerId }) => {
-      
-      if (killerId !== getMyId()) {
-        showToast('Другой кот поймал добычу');
-      }
+      if (killerId !== getMyId()) showToast('Другой кот поймал добычу');
     });
 
-    
     netOn('day_period', ({ period }) => {
       const periodMap = { morning: 0, day: 1, evening: 2, night: 3 };
       if (periodMap[period] !== undefined) setPeriod(periodMap[period]);
     });
 
-    
-    
     const charForServer = {
       id:         activeCharData?.id   ?? null,
       name:       activeCharData?.name ?? 'Безымянный',
       build:      activeCharData?.build ?? 'lean',
       appearance: activeCharData?.app  ?? null,
       size: (() => {
-  const age = activeCharData?.age ?? 0;
-  if (age <= 6) return 0.3;
-  if (age <= 9) return 0.4;
-  if (age <= 13) return 0.5;
-  return activeCharData?.size ?? 0.7;
-})(),
-      h:    getNeedValue('h')    ?? 100,
-      max_h: 30, 
-      e:    getNeedValue('e')    ?? 100,
-      food: getNeedValue('food') ?? 100,
-      thirst: getNeedValue('thirst') ?? 100,
-      ss:   getNeedValue('ss')   ?? 100,
+        const age = activeCharData?.age ?? 0;
+        if (age <= 6)  return 0.3;
+        if (age <= 9)  return 0.4;
+        if (age <= 13) return 0.5;
+        return activeCharData?.size ?? 0.7;
+      })(),
+      h:      getNeed('h')      ?? 100,
+      max_h:  30,
+      e:      getNeed('e')      ?? 100,
+      food:   getNeed('food')   ?? 100,
+      thirst: getNeed('thirst') ?? 100,
+      ss:     getNeed('ss')     ?? 100,
     };
 
-    
     setNeedsGetter(() => ({
-      h:      getNeedValue('h')      ?? 0,
-      e:      getNeedValue('e')      ?? 0,
-      food:   getNeedValue('food')   ?? 0,
-      thirst: getNeedValue('thirst') ?? 0,
-      ss:     getNeedValue('ss')     ?? 0,
+      h:      getNeed('h')      ?? 0,
+      e:      getNeed('e')      ?? 0,
+      food:   getNeed('food')   ?? 0,
+      thirst: getNeed('thirst') ?? 0,
+      ss:     getNeed('ss')     ?? 0,
     }));
 
     connect(charForServer);
 
-    
     let _lastMoveSend = 0;
-
-    
     let cameraX = 0;
     let cameraY = 0;
 
@@ -336,7 +275,6 @@ async function startGame(app, settings) {
       }
 
       setWalking(moving);
-
       if (keys.right) setFacing(false);
       else if (keys.left) setFacing(true);
 
@@ -344,11 +282,10 @@ async function startGame(app, settings) {
 
       updatePreySystem(active);
       updateCharacterActions(active);
-      updateOtherPlayers(); 
+      updateOtherPlayers();
 
       if (originalGroundY === null) originalGroundY = active.y;
 
-      
       if (keys.space && isGrounded && !jumpRequested) {
         verticalVelocity = JUMP_POWER;
         isGrounded    = false;
@@ -379,7 +316,6 @@ async function startGame(app, settings) {
 
       if (isGrounded) originalGroundY = active.y;
 
-      
       const now = performance.now();
       if (now - _lastMoveSend >= MOVE_SEND_MS) {
         _lastMoveSend = now;
@@ -391,7 +327,6 @@ async function startGame(app, settings) {
         });
       }
 
-      
       cameraX = active.x - app.screen.width  / 2;
       cameraY = active.y - app.screen.height / 2;
       cameraX = Math.max(0, Math.min(WORLD_WIDTH  - app.screen.width,  cameraX));
@@ -402,7 +337,6 @@ async function startGame(app, settings) {
 
     app.ticker.add(_activeTicker);
 
-    
     if (window._escHandler) window.removeEventListener('keydown', window._escHandler);
     window._escHandler = (e) => {
       if (e.key === 'Escape') {
@@ -421,8 +355,4 @@ async function startGame(app, settings) {
   } catch (error) {
     console.error('Ошибка запуска игры:', error);
   }
-}
-
-function _esc(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

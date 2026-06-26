@@ -25,7 +25,7 @@ function send(res, status, body) {
 }
 
 function verifyToken(req) {
-  const auth = req.headers['authorization'] ?? '';
+  const auth  = req.headers['authorization'] ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) return null;
   try { return jwt.verify(token, JWT_SECRET); }
@@ -131,28 +131,27 @@ const server = http.createServer(async (req, res) => {
         appearance: body.appearance ?? existing.appearance,
       });
       const saved = db.getCharacter(body.id);
-      console.log(`[char] внешность обновлена: ${saved.name} (${saved.id}) → ${payload.username}`);
+      console.log(`[char] внешность обновлена: ${saved.name} (${saved.id})`);
       return send(res, 200, { character: saved });
     }
 
-    const id    = genId('char');
-    const max_h = body.max_h ?? 30;
-    const ageMoons = Number(body.age_moons ?? body.age ?? 0);
-    const lastMoonUpdate = Number(body.last_moon_update ?? Math.floor(Date.now() / 1000));
+    const id       = genId('char');
+    const ageMoons = Math.max(0, Math.min(180, Math.floor(Number(body.age_moons ?? body.age ?? 0))));
+    const lastMoon = Math.floor(Number(body.last_moon_update ?? Date.now() / 1000));
+
     db.insertCharacter({
       id,
       user_id:          payload.userId,
       name:             (body.name ?? 'Безымянный').toString().slice(0, 40),
       tribe:            body.tribe,
       role:             body.role ?? 'Котёнок',
-      age_moons: Number.isNaN(ageMoons) ? 0 : Math.max(0, Math.floor(ageMoons)),
-      last_moon_update: Number.isNaN(lastMoonUpdate) ? Math.floor(Date.now() / 1000) : Math.floor(lastMoonUpdate),
+      age_moons:        Number.isNaN(ageMoons) ? 0 : ageMoons,
+      last_moon_update: Number.isNaN(lastMoon) ? Math.floor(Date.now() / 1000) : lastMoon,
       build:            body.build ?? 'lean',
       size:             body.size  ?? 0.7,
       appearance:       body.appearance ?? null,
-      h:                max_h,
-      max_h:            max_h,
-      max_health:       max_h,
+      h:                30,
+      max_h:            30,
       e:                100,
       food:             100,
       thirst:           100,
@@ -160,15 +159,16 @@ const server = http.createServer(async (req, res) => {
       toilet:           0,
       xp:               0,
       move_states:      null,
-      sleep_bonuses:    null,
+      need_bonuses:     null,
       parents:          null,
       mate:             null,
       kittens:          null,
       inventory:        [],
       achievements:     [],
     });
+
     const saved = db.getCharacter(id);
-    console.log(`[char] создан: ${saved.name} (${saved.id}) → ${payload.username}`);
+    console.log(`[char] создан: ${saved.name} (${saved.id}) ${ageMoons} лун → ${payload.username}`);
     return send(res, 200, { character: saved });
   }
 
@@ -209,20 +209,14 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'hello' && msg.payload) hello = msg.payload;
     } catch {}
 
-    if (!hello?.token) {
-      ws.close(4001, 'Нет авторизации');
-      return;
-    }
+    if (!hello?.token) { ws.close(4001, 'Нет авторизации'); return; }
 
     let userPayload;
     try { userPayload = jwt.verify(hello.token, JWT_SECRET); }
     catch { ws.close(4001, 'Токен невалиден или истёк'); return; }
 
     const charId = hello.charId;
-    if (!charId) {
-      ws.close(4002, 'Не выбран персонаж');
-      return;
-    }
+    if (!charId) { ws.close(4002, 'Не выбран персонаж'); return; }
 
     const char = db.getCharacter(charId);
     if (!char || char.user_id !== userPayload.userId) {
@@ -259,8 +253,7 @@ server.listen(PORT, () => {
   console.log(`✅ WarrCats server запущен на порту ${PORT}`);
   console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
   console.log(`   API:       http://localhost:${PORT}/api`);
-  console.log(`   Health:    http://localhost:${PORT}/health`);
   if (JWT_SECRET === 'warrcats_dev_secret_change_in_prod') {
-    console.warn('⚠️  JWT_SECRET не задан! Установите переменную окружения JWT_SECRET на проде.');
+    console.warn('⚠️  JWT_SECRET не задан!');
   }
 });
