@@ -143,7 +143,7 @@ const server = http.createServer(async (req, res) => {
       name:             (body.name ?? 'Безымянный').toString().slice(0, 40),
       tribe:            body.tribe,
       role:             body.role ?? 'Котёнок',
-      age_moons:        0,
+      age_moons: Number(body.age_moons ?? body.age ?? 0),
       last_moon_update: Math.floor(Date.now() / 1000),
       build:            body.build ?? 'lean',
       size:             body.size  ?? 0.7,
