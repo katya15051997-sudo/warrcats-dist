@@ -5,13 +5,13 @@ import { LargeFloor, loadBackground } from './fon/textures.js';
 import { currentSettings } from './config/game-settings.js';
 import { showInGameMenu, hideInGameMenu } from './ui/ingame-menu.js';
 import { initBottomMenu, hideBottomMenu, refreshActivePanel } from './ui/bottom-menu.js';
-import { startNeedsSystem, stopNeedsSystem, getNeed, syncAge, reloadForActiveCharacter as reloadPlayerSystem, gainFood, damageHealth, spendEnergyForStrike, removeVignette, getNeedPenalties } from './systems/player-system.js';
+import { startNeedsSystem, stopNeedsSystem, getNeed, syncAge, reloadForActiveCharacter as reloadPlayerSystem, gainFood, damageHealth, spendEnergyForStrike, removeVignette, getNeedPenalties, registerPeriodGetter } from './systems/player-system.js';
 import { reloadForActiveCharacter as reloadSkills, progressMoveTasks, addXp } from './systems/skills.js';
 import { createWorldObjects, stopActiveAction, isActionActive } from './world/world-objects.js';
 import { createPreySystem, updatePreySystem, strikeNearestPrey } from './systems/prey-system.js';
 import { createFoxEnemy, strikeFox, getFoxPosition, FOX_STRIKE_RADIUS } from './world/enemy-fox.js';
 import { setupCharacterActions, updateCharacterActions, resetCharacterPose } from './character/character-actions.js';
-import { createDayNightOverlay, updateDayNightCycle, setPeriod } from './systems/day-night-cycle.js';
+import { createDayNightOverlay, updateDayNightCycle, setPeriod, getCurrentPeriod } from './systems/day-night-cycle.js';
 import { applyCharacterData } from './character/character.js';
 import { getActiveCharacter } from './character/character-save.js';
 import { showToast } from './ui/notify.js';
@@ -94,6 +94,7 @@ async function startGame(app, settings) {
     app.stage.addChild(world);
 
     createDayNightOverlay(world, LargeFloor.width, LargeFloor);
+    registerPeriodGetter(() => getCurrentPeriod().id);
 
     world.addChild(LargeFloor);
     world.addChild(idleChar);

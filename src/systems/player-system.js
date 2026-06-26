@@ -1,6 +1,8 @@
 import { getActiveCharacter, patchActiveState } from '../character/character-save.js';
 import { currentSettings } from '../config/game-settings.js';
-import { getCurrentPeriod } from '../systems/day-night-cycle.js';
+
+let _getPeriodId = () => 'day';
+export function registerPeriodGetter(fn) { _getPeriodId = fn; }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const REFERENCE_BOUNDARY_UTC = Date.UTC(1970, 0, 4, 21, 0, 0, 0);
@@ -106,8 +108,8 @@ function _tick() {
 
   const dayFraction = deltaMs / DAY_DURATION_MS;
 
-  const period  = getCurrentPeriod?.()?.id ?? 'day';
-  const isNight = period === 'night';
+  const period    = _getPeriodId();
+  const isNight   = period === 'night';
   const isMorning = period === 'morning';
 
   const nightSlowdown = isNight ? 0.5 : 1.0;
