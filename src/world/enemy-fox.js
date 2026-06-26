@@ -9,7 +9,7 @@
 // - лиса возрождается через RESPAWN_DELAY_MS
 
 import * as PIXI from 'pixi.js';
-import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX } from '../systems/skills.js';
+import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX, canStrike } from '../systems/skills.js';
 import { damageHealth, spendEnergyForStrike, getNeed } from '../systems/player-system.js';
 import { refreshActivePanel } from '../ui/bottom-menu.js';
 import { showToast } from '../ui/notify.js';
@@ -101,7 +101,7 @@ function updateHealthBar() {
 export function strikeFox() {
   if (!foxAlive) return false;
 
-  if ((getNeed('e') ?? 0) <= 0) {
+  if (!canStrike()) {
     _combat('Вам надо поспать.');
     return false;
   }

@@ -1,6 +1,6 @@
 import { initLanding } from './landing.js';
 import { hideBottomMenu } from './bottom-menu.js';
-import { stopNeedsSystem, reloadForActiveCharacter as reloadPlayer } from '../systems/player-system.js';
+import { stopNeedsSystem, reloadForActiveCharacter as reloadPlayer, removeVignette } from '../systems/player-system.js';
 import { stopActiveAction } from '../world/world-objects.js';
 import { getCharacters, setActiveCharacter, getActiveCharacter } from '../character/character-save.js';
 import { idleChar, applyCharacterData } from '../character/character.js';
@@ -46,6 +46,7 @@ export function showInGameMenu(app) {
   document.getElementById('btn-main-menu').onclick = () => {
     stopActiveAction();
     stopNeedsSystem();
+    removeVignette();
     hideBottomMenu();
     hideInGameMenu();
     initLanding(window.startGameCallback);

@@ -1,5 +1,5 @@
 import { getActiveCharacter, patchActiveState } from '../character/character-save.js';
-import { addNeedBonus, gainEnergy } from '../systems/player-system.js';
+import { addNeedBonus, gainEnergy, getNeedPenalties } from '../systems/player-system.js';
 
 export const PLAYER_BASE_DAMAGE_MIN = 3;
 export const PLAYER_BASE_DAMAGE_MAX = 7;
@@ -247,7 +247,9 @@ function _applyStrengthBonus(amount, key) {
 
 export function getDamageMultiplier() {
   const ms = _ms();
-  return getRank().dam + (ms?.strengthBonusTotal ?? 0) * 0.01;
+  const base = getRank().dam + (ms?.strengthBonusTotal ?? 0) * 0.01;
+  const { damageMult } = getNeedPenalties();
+  return base * damageMult;
 }
 
 export function getCalculatedDamage() {
@@ -256,6 +258,10 @@ export function getCalculatedDamage() {
     min: Math.round(PLAYER_BASE_DAMAGE_MIN * mult),
     max: Math.round(PLAYER_BASE_DAMAGE_MAX * mult),
   };
+}
+
+export function canStrike() {
+  return getNeedPenalties().canStrike;
 }
 
 export function getRankBonusText() { return getRank().bonus; }

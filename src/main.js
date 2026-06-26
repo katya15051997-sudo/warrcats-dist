@@ -5,7 +5,7 @@ import { LargeFloor, loadBackground } from './fon/textures.js';
 import { currentSettings } from './config/game-settings.js';
 import { showInGameMenu, hideInGameMenu } from './ui/ingame-menu.js';
 import { initBottomMenu, hideBottomMenu, refreshActivePanel } from './ui/bottom-menu.js';
-import { startNeedsSystem, stopNeedsSystem, getNeed, syncAge, reloadForActiveCharacter as reloadPlayerSystem, gainFood, damageHealth, spendEnergyForStrike } from './systems/player-system.js';
+import { startNeedsSystem, stopNeedsSystem, getNeed, syncAge, reloadForActiveCharacter as reloadPlayerSystem, gainFood, damageHealth, spendEnergyForStrike, removeVignette, getNeedPenalties } from './systems/player-system.js';
 import { reloadForActiveCharacter as reloadSkills, progressMoveTasks, addXp } from './systems/skills.js';
 import { createWorldObjects, stopActiveAction, isActionActive } from './world/world-objects.js';
 import { createPreySystem, updatePreySystem, strikeNearestPrey } from './systems/prey-system.js';
@@ -293,7 +293,8 @@ async function startGame(app, settings) {
       }
       if (!keys.space) jumpRequested = false;
 
-      const currentSpeed = isGrounded ? SPEED : AIR_SPEED;
+      const { speedMult } = getNeedPenalties();
+      const currentSpeed = (isGrounded ? SPEED : AIR_SPEED) * speedMult;
 
       if (keys.right) active.x += currentSpeed;
       if (keys.left)  active.x -= currentSpeed;

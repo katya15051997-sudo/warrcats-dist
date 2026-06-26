@@ -5,8 +5,9 @@ import {
   getDamageMultiplier,
   PLAYER_BASE_DAMAGE_MIN,
   PLAYER_BASE_DAMAGE_MAX,
+  canStrike,
 } from './skills.js';
-import { spendEnergyForStrike, gainFood, getNeed } from './player-system.js';
+import { spendEnergyForStrike, gainFood, getNeed, getNeedPenalties } from './player-system.js';
 import { refreshActivePanel } from '../ui/bottom-menu.js';
 import { showToast } from '../ui/notify.js';
 
@@ -172,7 +173,7 @@ export function strikeNearestPrey(charX, charY) {
 
   if (!target) return false;
 
-  if ((getNeed('e') ?? 0) <= 0) {
+  if (!canStrike()) {
     showToast('Котик слишком устал. Поспим?');
     return true;
   }
