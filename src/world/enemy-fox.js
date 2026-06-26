@@ -9,9 +9,9 @@
 // - лиса возрождается через RESPAWN_DELAY_MS
 
 import * as PIXI from 'pixi.js';
-import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX } from '../systems/xp-system.js';
-import { damageHealth, spendSleepForStrike } from '../systems/needs-system.js';
-import { refreshActivePanel, getNeedValue } from '../ui/bottom-menu.js';
+import { addXp, getDamageMultiplier, getRankBonusText, getLearnedMoves, applyMoveEffects, progressMoveTasks, PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX } from '../systems/skills.js';
+import { damageHealth, spendEnergyForStrike, getNeed } from '../systems/player-system.js';
+import { refreshActivePanel } from '../ui/bottom-menu.js';
 import { showToast } from '../ui/notify.js';
 
 const FOX_TEXTURE = '/assets/fox.png';
@@ -101,12 +101,12 @@ function updateHealthBar() {
 export function strikeFox() {
   if (!foxAlive) return false;
 
-  if ((getNeedValue('e') ?? 0) <= 0) {
+  if ((getNeed('e') ?? 0) <= 0) {
     _combat('Вам надо поспать.');
     return false;
   }
 
-  spendSleepForStrike(5); // удар тратит 5 бодрости
+  spendEnergyForStrike(5);
 
   // Базовый случайный урон
   const baseDamage = randRange(PLAYER_BASE_DAMAGE_MIN, PLAYER_BASE_DAMAGE_MAX);

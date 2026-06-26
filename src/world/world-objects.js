@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
-import { setDrinking, setSharpening, doTraining } from '../systems/needs-system.js';
-import { addXp, progressMoveTasks } from '../systems/xp-system.js';
-import { refreshActivePanel, getNeedValue } from '../ui/bottom-menu.js';
+import { setDrinking, setSharpening, doTraining, getNeed } from '../systems/player-system.js';
+import { addXp, progressMoveTasks } from '../systems/skills.js';
+import { refreshActivePanel } from '../ui/bottom-menu.js';
 import { showToast } from '../ui/notify.js';
 
 const ACTION_DURATION_MS = 30000;
@@ -199,7 +199,7 @@ function closeMenu() {
 }
 
 export function hasStamina() {
-  return (getNeedValue('e') ?? 0) > 0;
+  return (getNeed('e') ?? 0) > 0;
 }
 
 function showNoStaminaWarning() {

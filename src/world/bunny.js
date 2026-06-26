@@ -7,10 +7,10 @@
 // ПКМ по тушке -> "Съесть" -> +10% сытости + 0.5 xp.
 
 import * as PIXI from 'pixi.js';
-import { huntPrey, spendSleepForStrike } from '../systems/needs-system.js';
+import { huntPrey, spendEnergyForStrike, getNeed } from '../systems/player-system.js';
 import { showContextMenu } from './world-objects.js';
-import { addXp, progressMoveTasks } from '../systems/xp-system.js';
-import { refreshActivePanel, getNeedValue } from '../ui/bottom-menu.js';
+import { addXp, progressMoveTasks } from '../systems/skills.js';
+import { refreshActivePanel } from '../ui/bottom-menu.js';
 
 const BUNNY_TEXTURE = '/assets/bunny.png';
 const DEN_TEXTURE = '/assets/gree.png';
@@ -139,12 +139,12 @@ export function isBunnyCaught() {
 export function strikeBunny() {
   if (!bunnySprite || caught) return false;
 
-  if ((getNeedValue('sleep') ?? 0) <= 0) {
+  if ((getNeed('e') ?? 0) <= 0) {
     showCatchNotification('😮‍💨 Бодрости не осталось — нельзя ударить');
     return false;
   }
 
-  spendSleepForStrike(5); // удар тратит 5 бодрости
+  spendEnergyForStrike(5);
 
   bunnyHealth = Math.max(0, bunnyHealth - BUNNY_DAMAGE_PER_HIT);
 
