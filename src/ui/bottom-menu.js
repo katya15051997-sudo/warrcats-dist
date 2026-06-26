@@ -82,6 +82,10 @@ export function hideBottomMenu() {
 
 export function refreshActivePanel() {
   if (!panelContainer) return;
+  if (activeTabId === 'needs' && activeNeedsSubTab === 'needs') {
+    _tickNeedsDOM();
+    return;
+  }
   const content = panelContainer.querySelector('.bottom-menu-panel-content');
   if (content) _renderAndBind(activeTabId, content);
 }
@@ -126,6 +130,7 @@ function _openPanel(tabId) {
 
 function _closePanel() {
   _stopMapTicker();
+  _stopNeedsTicker();
   if (panelContainer) { panelContainer.remove(); panelContainer = null; }
   activeTabId = null;
   if (barContainer) {
@@ -136,7 +141,8 @@ function _closePanel() {
 function _renderAndBind(tabId, contentEl) {
   contentEl.innerHTML = _renderTab(tabId);
   if (tabId === 'about') _bindAboutHandlers(contentEl);
-  if (tabId === 'needs') _bindNeedsHandlers(contentEl);
+  if (tabId === 'needs') { _bindNeedsHandlers(contentEl); _startNeedsTicker(); }
+  else                   _stopNeedsTicker();
   if (tabId === 'map')   _startMapTicker();
   else                   _stopMapTicker();
 }
@@ -173,10 +179,10 @@ function _renderNeeds() {
             <div class="need-label">${n.label}</div>
             <div class="need-bar-line">
               <div class="need-bar-track">
-                <div class="need-bar-fill" style="width:${pct}%; background:${_barColor(n.key, pct)};"></div>
-                <span class="need-bar-text">${Math.round(value)} / ${Math.round(max)}</span>
+                <div class="need-bar-fill" data-need-fill="${n.key}" style="width:${pct}%; background:${_barColor(n.key, pct)};"></div>
+                <span class="need-bar-text" data-need-text="${n.key}">${Math.round(value)} / ${Math.round(max)}</span>
               </div>
-              <span class="need-pct">${pct}%</span>
+              <span class="need-pct" data-need-pct="${n.key}">${pct}%</span>
             </div>
           </div>
         `;
@@ -388,6 +394,8 @@ function _bindNeedsHandlers(contentEl) {
       if (!tab || activeNeedsSubTab === tab.dataset.ns) return;
       activeNeedsSubTab = tab.dataset.ns;
       _renderAndBind('needs', contentEl);
+      if (activeNeedsSubTab === 'needs') _startNeedsTicker();
+      else _stopNeedsTicker();
     });
   }
 
@@ -437,7 +445,8 @@ function _formatDuration(ms) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-let mapTickIntervalId = null;
+let mapTickIntervalId   = null;
+let needsTickIntervalId = null;
 
 function _startMapTicker() {
   if (mapTickIntervalId) return;
@@ -446,6 +455,34 @@ function _startMapTicker() {
 
 function _stopMapTicker() {
   if (mapTickIntervalId) { clearInterval(mapTickIntervalId); mapTickIntervalId = null; }
+}
+
+function _startNeedsTicker() {
+  _stopNeedsTicker();
+  needsTickIntervalId = setInterval(_tickNeedsDOM, 500);
+}
+
+function _stopNeedsTicker() {
+  if (needsTickIntervalId) { clearInterval(needsTickIntervalId); needsTickIntervalId = null; }
+}
+
+function _tickNeedsDOM() {
+  if (!panelContainer || activeNeedsSubTab !== 'needs') return;
+
+  NEED_DEFS.forEach(n => {
+    const value = getNeed(n.key) ?? 0;
+    const max   = getMaxNeed(n.key);
+    const pct   = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+    const color = _barColor(n.key, pct);
+
+    const fill    = panelContainer.querySelector(`[data-need-fill="${n.key}"]`);
+    const text    = panelContainer.querySelector(`[data-need-text="${n.key}"]`);
+    const pctSpan = panelContainer.querySelector(`[data-need-pct="${n.key}"]`);
+
+    if (fill)    { fill.style.width = pct + '%'; fill.style.background = color; }
+    if (text)    text.textContent = `${Math.round(value)} / ${Math.round(max)}`;
+    if (pctSpan) pctSpan.textContent = pct + '%';
+  });
 }
 
 function _injectStyles() {
