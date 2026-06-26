@@ -593,6 +593,7 @@ export function showCharacterEditor(initial = null, onSaved = null) {
         name:       st.name,
         tribe:      st.tribe,
         role:       st.role,
+        age_moons:  st.age,
         build:      st.build,
         size:       st.size,
         appearance: st.app,
