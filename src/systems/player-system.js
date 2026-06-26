@@ -1,5 +1,6 @@
 import { getActiveCharacter, patchActiveState } from '../character/character-save.js';
 import { currentSettings } from '../config/game-settings.js';
+import { getCurrentPeriod } from '../systems/day-night-cycle.js';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const REFERENCE_BOUNDARY_UTC = Date.UTC(1970, 0, 4, 21, 0, 0, 0);
@@ -9,13 +10,6 @@ export function setDayDuration(ms) { DAY_DURATION_MS = ms; }
 
 const BASE_MAX_HEALTH = 30;
 const BASE_MAX_ENERGY = 100;
-
-const DAILY_CHANGE = {
-  food:   -10,
-  e:      -10,
-  thirst: -10,
-  toilet: +10,
-};
 
 let isDrinking   = false;
 let isSleeping   = false;
@@ -106,24 +100,64 @@ export function stopNeedsSystem() {
 }
 
 function _tick() {
-  const now      = Date.now();
-  const deltaMs  = now - lastTickTime;
-  lastTickTime   = now;
+  const now     = Date.now();
+  const deltaMs = now - lastTickTime;
+  lastTickTime  = now;
 
   const dayFraction = deltaMs / DAY_DURATION_MS;
 
-  for (const [key, dailyChange] of Object.entries(DAILY_CHANGE)) {
-    changeNeed(key, dailyChange * dayFraction);
+  const period  = getCurrentPeriod?.()?.id ?? 'day';
+  const isNight = period === 'night';
+  const isMorning = period === 'morning';
+
+  const nightSlowdown = isNight ? 0.5 : 1.0;
+
+  const food   = getNeed('food')   ?? 100;
+  const thirst = getNeed('thirst') ?? 100;
+  const toilet = getNeed('toilet') ?? 0;
+
+  const foodMult   = thirst < 20 ? 1.3 : 1.0;
+  const thirstMult = toilet > 70 ? 1.2 : 1.0;
+  const sleepMult  = food < 30   ? 0.5 : 1.0;
+
+  changeNeed('food',   -80 * dayFraction * nightSlowdown * foodMult);
+  changeNeed('thirst', -70 * dayFraction * nightSlowdown * thirstMult);
+  changeNeed('toilet', +50 * dayFraction);
+
+  if (isMorning) {
+    changeNeed('food',   -80 * 0.1 * dayFraction);
+    changeNeed('thirst', -70 * 0.1 * dayFraction);
   }
 
   if (isDrinking) {
     changeNeed('thirst', (deltaMs / 10000) * 10);
     changeNeed('toilet', (deltaMs / 60000) * 20);
   }
-  if (isSleeping)   changeNeed('e',  (deltaMs / 60000) * 10);
+
+  if (isSleeping) {
+    const energyRate = 10 * sleepMult;
+    changeNeed('e', (deltaMs / 60000) * energyRate);
+  }
+
   if (isSharpening) changeNeed('ss', (deltaMs / 10000) * 10);
 
-  changeNeed('h', getMaxNeed('h') * 0.005 * dayFraction);
+  changeNeed('h', getMaxNeed('h') * 0.01 * dayFraction);
+
+  const currentFood   = getNeed('food')   ?? 100;
+  const currentThirst = getNeed('thirst') ?? 100;
+  const currentToilet = getNeed('toilet') ?? 0;
+
+  if (currentFood === 0) {
+    changeNeed('h', -getMaxNeed('h') * 0.005 * dayFraction);
+  }
+  if (currentThirst === 0) {
+    changeNeed('h', -getMaxNeed('h') * 0.008 * dayFraction);
+  }
+  if (currentToilet >= 100) {
+    changeNeed('h', -getMaxNeed('h') * 0.002 * dayFraction);
+  }
+
+  _updateVignette();
 }
 
 export function setDrinking(v)         { isDrinking   = !!v; }
@@ -137,9 +171,16 @@ export function damageHealth(amount)        { changeNeed('h',     -amount); }
 export function healPercent(pct)            { changeNeed('h', getMaxNeed('h') * (pct / 100)); }
 export function doTraining()                { changeNeed('e', -3); }
 export function spendEnergyForStrike(a = 5) { changeNeed('e', -a); }
-export function sharpenClaws(a = 100)       { changeNeed('ss', a); changeNeed('e', -5); }
+export function sharpenClaws(a = 10)        { changeNeed('ss', a); changeNeed('e', -2); }
 
 export function relieveToilet() {
+  const current = getNeed('toilet');
+  if (current === null || current <= 0) return false;
+  changeNeed('toilet', -100);
+  return true;
+}
+
+export function markTerritory() {
   const current = getNeed('toilet');
   if (current === null || current <= 0) return false;
   changeNeed('toilet', -20);
@@ -164,6 +205,77 @@ export function restoreFromRank(rankLvl) {
     addNeedBonus('e', ENERGY_BONUS_PER_LEVEL,  `rank_e_${lvl}`);
     if (lvl === 3) addNeedBonus('e', ENERGY_BONUS_RANK3, 'rank3_passive');
   }
+}
+
+let _vignetteEl = null;
+
+function _updateVignette() {
+  const h    = getNeed('h')      ?? 100;
+  const maxH = getMaxNeed('h');
+  const hPct = maxH > 0 ? h / maxH : 1;
+
+  const thirst = getNeed('thirst') ?? 100;
+  const toilet = getNeed('toilet') ?? 0;
+
+  const showRed  = hPct < 0.3;
+  const showBlue = thirst < 10;
+
+  if (!showRed && !showBlue) {
+    if (_vignetteEl) { _vignetteEl.remove(); _vignetteEl = null; }
+    return;
+  }
+
+  if (!_vignetteEl) {
+    _vignetteEl = document.createElement('div');
+    _vignetteEl.id = 'needs-vignette';
+    _vignetteEl.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:500;';
+    document.body.appendChild(_vignetteEl);
+  }
+
+  if (showRed) {
+    const intensity = Math.round((1 - hPct / 0.3) * 180);
+    _vignetteEl.style.boxShadow = `inset 0 0 120px 60px rgba(${intensity + 50},0,0,0.55)`;
+  } else if (showBlue) {
+    _vignetteEl.style.boxShadow = 'inset 0 0 100px 50px rgba(30,80,180,0.4)';
+  }
+}
+
+export function removeVignette() {
+  if (_vignetteEl) { _vignetteEl.remove(); _vignetteEl = null; }
+}
+
+export function getNeedPenalties() {
+  const food   = getNeed('food')   ?? 100;
+  const thirst = getNeed('thirst') ?? 100;
+  const e      = getNeed('e')      ?? 100;
+  const maxE   = getMaxNeed('e');
+  const ePct   = maxE > 0 ? e / maxE : 1;
+  const ss     = getNeed('ss')     ?? 100;
+  const toilet = getNeed('toilet') ?? 0;
+
+  let damageMult = 1.0;
+  let speedMult  = 1.0;
+  let canStrike  = true;
+
+  if (food < 20)   damageMult *= 0.75;
+  if (thirst < 20) damageMult *= 0.80;
+  if (ePct < 0.2)  damageMult *= 0.80;
+  if (ss < 20)     damageMult *= 0.90;
+  if (toilet > 80) damageMult *= 0.90;
+
+  if (food < 20)   speedMult  *= 0.85;
+  if (thirst < 20) speedMult  *= 0.85;
+
+  const h    = getNeed('h')      ?? 100;
+  const maxH = getMaxNeed('h');
+  const hPct = maxH > 0 ? h / maxH : 1;
+  if (hPct < 0.1)  speedMult  *= 0.70;
+
+  if (ePct <= 0)   canStrike  = false;
+
+  if (food > 80) damageMult *= 1.05;
+
+  return { damageMult, speedMult, canStrike };
 }
 
 export function reloadForActiveCharacter() {

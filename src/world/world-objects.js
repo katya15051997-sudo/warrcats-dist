@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { setDrinking, setSharpening, doTraining, getNeed } from '../systems/player-system.js';
+import { setDrinking, doTraining, getNeed, sharpenClaws } from '../systems/player-system.js';
 import { addXp, progressMoveTasks } from '../systems/skills.js';
 import { refreshActivePanel } from '../ui/bottom-menu.js';
 import { showToast } from '../ui/notify.js';
@@ -34,8 +34,9 @@ const OBJECTS_CONFIG = [
       {
         id: 'sharpen_tree',
         label: 'Точить когти',
-        start: () => setSharpening(true),
-        stop: () => setSharpening(false),
+        start: () => {},
+        stop:  () => {},
+        onComplete: () => sharpenClaws(),
       },
       {
         id: 'train_tree',
@@ -63,8 +64,9 @@ const OBJECTS_CONFIG = [
       {
         id: 'sharpen_stump',
         label: 'Точить когти',
-        start: () => setSharpening(true),
-        stop: () => setSharpening(false),
+        start: () => {},
+        stop:  () => {},
+        onComplete: () => sharpenClaws(),
       },
       {
         id: 'train_stump',
