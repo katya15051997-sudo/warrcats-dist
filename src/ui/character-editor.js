@@ -584,21 +584,25 @@ export function showCharacterEditor(initial = null, onSaved = null) {
   
   footer.querySelector('#ce-cancel').addEventListener('click', () => { destroyPreview(); editorStyle.remove(); overlay.remove(); });
   footer.querySelector('#ce-save').addEventListener('click', async () => {
-    const lockedSize = getLockedSize(st.age);
+    let initialAge = Number(st.age);
+    if (Number.isNaN(initialAge) || initialAge < 0) initialAge = 0;
+    initialAge = Math.floor(initialAge);
+
+    const lockedSize = getLockedSize(initialAge);
     if (lockedSize !== null) st.size = lockedSize;
 
     let saved;
     try {
       saved = await createCharacter({
-  name:       st.name,
-  tribe:      st.tribe,
-  role:       st.role,
-  build:      st.build,
-  size:       st.size,
-  appearance: st.app,
-  age_moons:  st.age,
-  last_moon_update: Math.floor(Date.now() / 1000),
-});
+        name:             st.name,
+        tribe:            st.tribe,
+        role:             st.role,
+        build:            st.build,
+        size:             st.size,
+        appearance:       st.app,
+        age_moons:        initialAge,
+        last_moon_update: Math.floor(Date.now() / 1000),
+      });
     } catch (e) {
       console.warn('Сервер:', e);
       alert('Не удалось сохранить котика: ' + (e.message ?? e));

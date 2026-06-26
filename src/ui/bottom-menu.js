@@ -271,12 +271,17 @@ function renderMoveAccordion(tier, label) {
 }
 
 function bindNeedsTabHandlers(contentEl) {
-  contentEl.querySelectorAll('.ns-subtab').forEach(el => {
-    el.addEventListener('click', () => {
-      activeNeedsSubTab = el.dataset.ns;
+  const tabRow = contentEl.querySelector('.ns-subtabs');
+  if (tabRow) {
+    tabRow.addEventListener('click', (event) => {
+      const tab = event.target.closest('.ns-subtab');
+      if (!tab) return;
+      const ns = tab.dataset.ns;
+      if (!ns || activeNeedsSubTab === ns) return;
+      activeNeedsSubTab = ns;
       renderAndBindTabContent('needs', contentEl);
     });
-  });
+  }
 
   contentEl.querySelectorAll('.moves-acc-header').forEach(el => {
     el.addEventListener('click', () => {
@@ -401,13 +406,14 @@ function formatDamageRange() {
 }
 
 function renderNeedsAndSkills() {
+  const currentSubTab = activeNeedsSubTab === 'skills' ? 'skills' : 'needs';
   return `
     <div class="ns-subtabs">
-      <div class="ns-subtab ${activeNeedsSubTab === 'needs' ? 'active' : ''}" data-ns="needs">Потребности</div>
-      <div class="ns-subtab ${activeNeedsSubTab === 'skills' ? 'active' : ''}" data-ns="skills">Знания</div>
+      <div class="ns-subtab ${currentSubTab === 'needs' ? 'active' : ''}" data-ns="needs">Потребности</div>
+      <div class="ns-subtab ${currentSubTab === 'skills' ? 'active' : ''}" data-ns="skills">Знания</div>
     </div>
     <div class="ns-subcontent">
-      ${activeNeedsSubTab === 'needs' ? renderNeeds() : renderSkillsSubTab()}
+      ${currentSubTab === 'needs' ? renderNeeds() : renderSkillsSubTab()}
     </div>
   `;
 }

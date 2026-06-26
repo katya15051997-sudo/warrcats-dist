@@ -137,14 +137,16 @@ const server = http.createServer(async (req, res) => {
 
     const id    = genId('char');
     const max_h = body.max_h ?? 30;
+    const ageMoons = Number(body.age_moons ?? body.age ?? 0);
+    const lastMoonUpdate = Number(body.last_moon_update ?? Math.floor(Date.now() / 1000));
     db.insertCharacter({
       id,
       user_id:          payload.userId,
       name:             (body.name ?? 'Безымянный').toString().slice(0, 40),
       tribe:            body.tribe,
       role:             body.role ?? 'Котёнок',
-      age_moons: Number(body.age_moons ?? body.age ?? 0),
-      last_moon_update: Math.floor(Date.now() / 1000),
+      age_moons: Number.isNaN(ageMoons) ? 0 : Math.max(0, Math.floor(ageMoons)),
+      last_moon_update: Number.isNaN(lastMoonUpdate) ? Math.floor(Date.now() / 1000) : Math.floor(lastMoonUpdate),
       build:            body.build ?? 'lean',
       size:             body.size  ?? 0.7,
       appearance:       body.appearance ?? null,
