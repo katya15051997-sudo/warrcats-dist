@@ -226,7 +226,7 @@ export function showCharacterEditor(initial = null, onSaved = null) {
   overlay.id = 'char-editor-overlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,18,10,0.97);z-index:300;display:flex;flex-direction:column;font-family:Arial,sans-serif;';
 
-  injectGameStyles();
+  const editorStyle = injectGameStyles();
 
   const box = document.createElement('div');
   box.style.cssText = 'background:transparent;color:#e8d8b0;width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column;';

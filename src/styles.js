@@ -622,9 +622,13 @@ const GAME_CSS = `
 `;
 
 export function injectGameStyles() {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
+  let style = document.getElementById(STYLE_ID);
+  if (style) return style;
+
+  style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = GAME_CSS;
   document.head.appendChild(style);
+
+  return style;
 }
