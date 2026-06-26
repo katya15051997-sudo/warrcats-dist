@@ -590,14 +590,15 @@ export function showCharacterEditor(initial = null, onSaved = null) {
     let saved;
     try {
       saved = await createCharacter({
-        name:       st.name,
-        tribe:      st.tribe,
-        role:       st.role,
-        age_moons:  st.age,
-        build:      st.build,
-        size:       st.size,
-        appearance: st.app,
-      });
+  name:       st.name,
+  tribe:      st.tribe,
+  role:       st.role,
+  build:      st.build,
+  size:       st.size,
+  appearance: st.app,
+  age_moons:  st.age,
+  last_moon_update: Math.floor(Date.now() / 1000),
+});
     } catch (e) {
       console.warn('Сервер:', e);
       alert('Не удалось сохранить котика: ' + (e.message ?? e));
