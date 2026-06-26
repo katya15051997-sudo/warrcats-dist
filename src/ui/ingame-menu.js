@@ -1,6 +1,6 @@
 import { initLanding } from './landing.js';
 import { hideBottomMenu } from './bottom-menu.js';
-import { stopNeedsSystem } from '../systems/needs-system.js';
+import { stopNeedsSystem, reloadForActiveCharacter as reloadPlayer } from '../systems/player-system.js';
 import { stopActiveAction } from '../world/world-objects.js';
 import { getCharacters, setActiveCharacter, getActiveCharacter } from '../character/character-save.js';
 import { idleChar, applyCharacterData } from '../character/character.js';
@@ -117,8 +117,7 @@ function showInGameCharacterSelect() {
         btn.addEventListener('click', () => {
           setActiveCharacter(char);
           try { if (idleChar) applyCharacterData(idleChar, char); } catch (e) { console.warn(e); }
-          import('../character/character-profile.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
-          import('../systems/needs-system.js').then(m => m.reloadForActiveCharacter && m.reloadForActiveCharacter()).catch(()=>{});
+          reloadPlayer();
           render();
           const banner = document.createElement('div');
           banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(58,47,30,0.97);border:2px solid #8B5A2B;color:#ffcc80;padding:12px 28px;border-radius:10px;font-size:14px;z-index:9999;pointer-events:none;';
