@@ -1,37 +1,29 @@
-// server/protocol.js
-// Единый источник истины для всех типов сообщений WS.
-// Импортируется и сервером, и клиентом (network.js).
-
 const MSG = {
-  // Клиент → сервер
-  MOVE:            'move',            // { x, y, facingLeft, walking }
-  STRIKE:          'strike',          // { targetId, type: 'fox'|'prey'|'player' }
-  CHAT:            'chat',            // { text }
-  SPARRING_INVITE: 'sparring_invite', // { targetId }
-  SPARRING_ACCEPT: 'sparring_accept', // { fromId }
-  SPARRING_REJECT: 'sparring_reject', // { fromId }
-  NEEDS_SYNC:      'needs_sync',      // { h, e, food, ss, thirst } — периодически
-  ACTION:          'action',          // { actionId } — сесть/поспать/вылизаться
+  MOVE:            'move',
+  STRIKE:          'strike',
+  CHAT:            'chat',
+  SPARRING_INVITE: 'sparring_invite',
+  SPARRING_ACCEPT: 'sparring_accept',
+  SPARRING_REJECT: 'sparring_reject',
+  STATE_SYNC:      'state_sync',
+  ACTION:          'action',
 
-  // Сервер → клиент (конкретному игроку)
-  INIT:            'init',            // { myId, players[], prey[], period }
-  SELF_STRIKE_RES: 'self_strike_res', // { damage, stunMs, bleed } — результат своего удара
+  INIT:            'init',
+  SELF_STRIKE_RES: 'self_strike_res',
 
-  // Сервер → всем в комнате (broadcast)
-  STATE:           'state',           // { players[] } — снапшот каждые 50мс
-  PLAYER_JOIN:     'player_join',     // { player }
-  PLAYER_LEAVE:    'player_leave',    // { id }
-  STRIKE_RESULT:   'strike_result',   // { attackerId, targetId, damage, stunMs }
-  CHAT_MSG:        'chat_msg',        // { senderId, name, text }
-  SPARRING_REQ:    'sparring_req',    // { fromId, fromName } — запрос к target
-  SPARRING_DONE:   'sparring_done',   // { p1Id, p2Id } — оба потратили энергию
-  SPARRING_CANCEL: 'sparring_cancel', // { fromId } — отклонено/таймаут
-  PREY_SPAWN:      'prey_spawn',      // { prey } — дичь появилась
-  PREY_KILLED:     'prey_killed',     // { preyId, killerId }
-  PREY_STATE:      'prey_state',      // { prey[] } — позиции дичи каждые 200мс
-  DAY_PERIOD:      'day_period',      // { period: 'morning'|'day'|'evening'|'night' }
-  ERROR:           'error',           // { code, text }
+  STATE:           'state',
+  PLAYER_JOIN:     'player_join',
+  PLAYER_LEAVE:    'player_leave',
+  STRIKE_RESULT:   'strike_result',
+  CHAT_MSG:        'chat_msg',
+  SPARRING_REQ:    'sparring_req',
+  SPARRING_DONE:   'sparring_done',
+  SPARRING_CANCEL: 'sparring_cancel',
+  PREY_SPAWN:      'prey_spawn',
+  PREY_KILLED:     'prey_killed',
+  PREY_STATE:      'prey_state',
+  DAY_PERIOD:      'day_period',
+  ERROR:           'error',
 };
 
-// Для Node.js (CommonJS) и ESM-клиента
 if (typeof module !== 'undefined') module.exports = { MSG };

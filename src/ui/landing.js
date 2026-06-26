@@ -1,7 +1,7 @@
 import { checkSession, openAuthModal } from './auth.js';
 import { clearSession } from '../net/api.js';
 import { loadServers, addServer, defaultSettings } from '../config/servers.js';
-import { loadCharacters, getActiveCharacter, setActiveCharacter, saveCharacter, deleteCharacter } from '../character/character-save.js';
+import { loadCharactersFromServer, getCharacters, getActiveCharacter, setActiveCharacter, deleteCharacter } from '../character/character-save.js';
 import { showCharacterEditor } from './character-editor.js';
 import { applyServerSettings } from '../config/game-settings.js';
 
@@ -330,6 +330,7 @@ export async function initLanding(startGameCb) {
   if (me) {
     _currentUser = me;
     window.currentUser = me;
+    await loadCharactersFromServer();
     _setLoggedIn(me.username);
   }
 }
@@ -406,6 +407,7 @@ function _setLoggedOut() {
     if (!me) return;
     _currentUser = me;
     window.currentUser = me;
+    await loadCharactersFromServer();
     _setLoggedIn(me.username);
   });
   btns.appendChild(loginBtn);
@@ -652,10 +654,7 @@ function _renderCharScreen(screen) {
   listWrap.appendChild(newBtn);
 
   
-  const chars = loadCharacters();
-  if (window.currentUser?.characters?.length) {
-    window.currentUser.characters.forEach(c => saveCharacter(c));
-  }
+  const chars = getCharacters();
 
   if (chars.length === 0) {
     const empty = document.createElement('div');
@@ -696,9 +695,7 @@ function _renderCharScreen(screen) {
       delBtn.title = 'Удалить';
       delBtn.addEventListener('click', async () => {
         if (!confirm(`Удалить котика ${char.name}?`)) return;
-        deleteCharacter(char.id);
-        const remaining = loadCharacters().filter(c => c.id !== char.id);
-        if (isActive) setActiveCharacter(remaining[0] ?? null);
+        await deleteCharacter(char.id);
         _renderCharScreen(screen);
       });
       row.appendChild(delBtn);

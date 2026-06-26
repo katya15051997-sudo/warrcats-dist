@@ -1,13 +1,5 @@
-// api.js
-// Клиентский хелпер для общения с HTTP API сервера.
-// Автоматически подставляет токен авторизации из localStorage.
-
-// Базовый URL API — в dev-режиме сервер на 8080, в проде — тот же хост
 export function getApiBase() {
-  if (location.hostname === 'localhost') {
-    return 'http://localhost:8080';
-  }
-  // На проде API на том же хосте/порту
+  if (location.hostname === 'localhost') return 'http://localhost:8080';
   return `${location.protocol}//${location.host}`;
 }
 
@@ -23,38 +15,19 @@ function authHeaders() {
   };
 }
 
-export async function apiGet(path) {
-  const res = await fetch(getApiBase() + path, {
-    method: 'GET',
-    headers: authHeaders(),
-  });
-  const data = await res.json();
+async function _req(method, path, body) {
+  const opts = { method, headers: authHeaders() };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(getApiBase() + path, opts);
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
   return data;
 }
 
-export async function apiPost(path, body) {
-  const res = await fetch(getApiBase() + path, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-  return data;
-}
-
-export async function apiDelete(path) {
-  const res = await fetch(getApiBase() + path, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-  return data;
-}
-
-// ─── Авторизация ─────────────────────────────────────────────────────────────
+export const apiGet    = (p)    => _req('GET',    p);
+export const apiPost   = (p, b) => _req('POST',   p, b);
+export const apiPatch  = (p, b) => _req('PATCH',  p, b);
+export const apiDelete = (p)    => _req('DELETE', p);
 
 export function saveSession(token, userId, username) {
   localStorage.setItem('warrcats_token',    token);
@@ -66,6 +39,7 @@ export function clearSession() {
   localStorage.removeItem('warrcats_token');
   localStorage.removeItem('warrcats_user_id');
   localStorage.removeItem('warrcats_username');
+  localStorage.removeItem('warrcats_active_char_id');
 }
 
 export function getSession() {
@@ -76,37 +50,19 @@ export function getSession() {
   return { token, userId, username };
 }
 
-// Проверить токен на сервере и вернуть данные пользователя + персонажей
-// Возвращает null если токен протух
 export async function fetchMe() {
-  try {
-    return await apiGet('/api/me');
-  } catch {
-    return null;
-  }
+  try { return await apiGet('/api/me'); }
+  catch { return null; }
 }
 
-// Регистрация
 export async function apiRegister(username, email, password) {
   const data = await apiPost('/api/register', { username, email, password });
   saveSession(data.token, data.userId, data.username);
   return data;
 }
 
-// Логин
 export async function apiLogin(username, password) {
   const data = await apiPost('/api/login', { username, password });
   saveSession(data.token, data.userId, data.username);
   return data;
-}
-
-// Сохранить персонажа на сервере
-export async function apiSaveCharacter(charData) {
-  const data = await apiPost('/api/characters', charData);
-  return data.character;
-}
-
-// Удалить персонажа
-export async function apiDeleteCharacter(charId) {
-  return apiDelete(`/api/characters/${charId}`);
 }

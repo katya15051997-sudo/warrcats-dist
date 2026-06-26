@@ -1,6 +1,4 @@
-// network.js
-// WebSocket-клиент. Всё общение с сервером через этот модуль.
-// При подключении передаёт токен авторизации в hello-сообщении.
+import { getCurrentStateSnapshot } from '../character/character-save.js';
 
 const WS_URL = (() => {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -9,26 +7,25 @@ const WS_URL = (() => {
 })();
 
 const RECONNECT_DELAY_MS = 3000;
-const NEEDS_SYNC_MS      = 5000;
+const STATE_SYNC_MS      = 3000;
 
 let _ws             = null;
 let _myId           = null;
 let _handlers       = {};
 let _reconnectTimer = null;
-let _needsSyncTimer = null;
-let _needsGetter    = null;
-let _charData       = null;
+let _syncTimer      = null;
+let _charId         = null;
 
-// ─── Публичный API ────────────────────────────────────────────────────────────
-
-export function connect(charData) {
-  _charData = charData;
+export function connect(charIdOrObj) {
+  if (typeof charIdOrObj === 'string')      _charId = charIdOrObj;
+  else if (charIdOrObj && charIdOrObj.id)   _charId = charIdOrObj.id;
+  else                                      _charId = null;
   _open();
 }
 
 export function disconnect() {
   if (_reconnectTimer) clearTimeout(_reconnectTimer);
-  if (_needsSyncTimer) clearInterval(_needsSyncTimer);
+  if (_syncTimer)      clearInterval(_syncTimer);
   if (_ws) { _ws.onclose = null; _ws.close(); _ws = null; }
   _myId = null;
 }
@@ -45,37 +42,34 @@ export function send(type, payload = {}) {
 export function getMyId()     { return _myId; }
 export function isConnected() { return _ws?.readyState === WebSocket.OPEN; }
 
-export function setNeedsGetter(fn) { _needsGetter = fn; }
-
-// ─── Внутренние функции ───────────────────────────────────────────────────────
+export function setStateGetter() {}
+export function setNeedsGetter() {}
 
 function _open() {
   if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
+
+  if (!_charId) {
+    console.warn('[net] нет charId — подключение отменено');
+    return;
+  }
 
   console.log(`[net] подключаемся к ${WS_URL}`);
   _ws = new WebSocket(WS_URL);
 
   _ws.onopen = () => {
     console.log('[net] соединение установлено');
-
-    // Добавляем токен авторизации в hello-сообщение
     const token = localStorage.getItem('warrcats_token');
-    _ws.send(JSON.stringify({
-      type: 'hello',
-      payload: { ...(_charData ?? {}), token },
-    }));
+    _ws.send(JSON.stringify({ type: 'hello', payload: { token, charId: _charId } }));
 
-    if (_needsSyncTimer) clearInterval(_needsSyncTimer);
-    _needsSyncTimer = setInterval(_syncNeeds, NEEDS_SYNC_MS);
+    if (_syncTimer) clearInterval(_syncTimer);
+    _syncTimer = setInterval(_syncState, STATE_SYNC_MS);
   };
 
   _ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
 
-    if (msg.type === 'init') {
-      _myId = msg.payload?.myId ?? null;
-    }
+    if (msg.type === 'init') _myId = msg.payload?.myId ?? null;
 
     const fn = _handlers[msg.type];
     if (fn) fn(msg.payload);
@@ -83,7 +77,7 @@ function _open() {
 
   _ws.onclose = (e) => {
     console.warn(`[net] закрыто (code=${e.code}), переподключение через ${RECONNECT_DELAY_MS}мс`);
-    if (_needsSyncTimer) clearInterval(_needsSyncTimer);
+    if (_syncTimer) clearInterval(_syncTimer);
     _reconnectTimer = setTimeout(_open, RECONNECT_DELAY_MS);
   };
 
@@ -93,8 +87,11 @@ function _open() {
   };
 }
 
-function _syncNeeds() {
-  if (!_needsGetter) return;
-  const needs = _needsGetter();
-  if (needs) send('needs_sync', needs);
+function _syncState() {
+  try {
+    const state = getCurrentStateSnapshot();
+    if (state) send('state_sync', state);
+  } catch (e) {
+    console.warn('[net] не удалось собрать snapshot:', e.message);
+  }
 }

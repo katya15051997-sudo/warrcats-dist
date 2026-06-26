@@ -2,7 +2,7 @@ import { initLanding } from './landing.js';
 import { hideBottomMenu } from './bottom-menu.js';
 import { stopNeedsSystem } from '../systems/needs-system.js';
 import { stopActiveAction } from '../world/world-objects.js';
-import { loadCharacters, setActiveCharacter, getActiveCharacter } from '../character/character-save.js';
+import { getCharacters, setActiveCharacter, getActiveCharacter } from '../character/character-save.js';
 import { idleChar, applyCharacterData } from '../character/character.js';
 import { buildImg, bodyToFilter } from '../character/character-preview.js';
 import { injectGameStyles } from '../styles.js';
@@ -78,7 +78,7 @@ function showInGameCharacterSelect() {
     `;
     overlay.appendChild(header);
 
-    const chars = loadCharacters();
+    const chars = getCharacters();
     const currentActive = getActiveCharacter();
     const listWrap = document.createElement('div');
     listWrap.style.cssText = 'width:100%;max-width:800px;padding:16px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;';

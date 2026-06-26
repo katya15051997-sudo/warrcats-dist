@@ -1,83 +1,50 @@
 import { setNeedValue, getNeedValue } from '../ui/bottom-menu.js';
 import { getMaxHealth } from '../character/character-profile.js';
-import { getCharacterStorageKey } from '../character/character-save.js';
-
-const STORAGE_KEY_BASE = 'warrcats_max_sleep_bonuses';
-
-function getStorageKey() {
-  return getCharacterStorageKey(STORAGE_KEY_BASE);
-}
+import { getActiveCharacter, patchActiveState } from '../character/character-save.js';
 
 export let DAY_DURATION_MS = 6 * 60 * 60 * 1000;
 
-export function setDayDuration(ms) {
-  DAY_DURATION_MS = ms;
-}
+export function setDayDuration(ms) { DAY_DURATION_MS = ms; }
 
 const BASE_MAX_SLEEP = 100;
-let appliedSleepBonusKeys = loadAppliedSleepBonusKeys();
-let maxSleepBonusTotal = sumAppliedBonuses();
 
-function loadAppliedSleepBonusKeys() {
-  try {
-    const saved = localStorage.getItem(getStorageKey());
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.error('Ошибка загрузки бонусов бодрости:', e);
-  }
-  return {};
+function _bonuses() {
+  const a = getActiveCharacter();
+  if (!a) return {};
+  if (!a.sleep_bonuses || typeof a.sleep_bonuses !== 'object') a.sleep_bonuses = {};
+  return a.sleep_bonuses;
 }
 
-function saveAppliedSleepBonusKeys() {
-  try {
-    localStorage.setItem(getStorageKey(), JSON.stringify(appliedSleepBonusKeys));
-  } catch (e) {
-    console.error('Ошибка сохранения бонусов бодрости:', e);
-  }
+function _sumBonuses() {
+  return Object.values(_bonuses()).reduce((a, b) => a + (b || 0), 0);
 }
 
-function sumAppliedBonuses() {
-  return Object.values(appliedSleepBonusKeys).reduce((a, b) => a + b, 0);
-}
-
-export function reloadForActiveCharacter() {
-  appliedSleepBonusKeys = loadAppliedSleepBonusKeys();
-  maxSleepBonusTotal = sumAppliedBonuses();
-}
+export function reloadForActiveCharacter() {}
 
 export function addMaxSleepBonus(amount, key) {
   if (!amount) return;
-  if (key && appliedSleepBonusKeys[key] !== undefined) return;
-
+  const obj = _bonuses();
   if (key) {
-    appliedSleepBonusKeys[key] = amount;
-    saveAppliedSleepBonusKeys();
+    if (obj[key] !== undefined) return;
+    obj[key] = amount;
+    patchActiveState({ sleep_bonuses: { ...obj } });
   }
-  maxSleepBonusTotal += amount;
-
   const current = getNeedValue('e');
-  if (current !== null) {
-    setNeedValue('e', current + amount);
-  }
+  if (current !== null) setNeedValue('e', current + amount);
 }
 
 export function getMaxSleep() {
-  return BASE_MAX_SLEEP + maxSleepBonusTotal;
+  return BASE_MAX_SLEEP + _sumBonuses();
 }
 
-const DAILY_CHANGE = {
-  food:   -10, 
-  ss:  -10,
-  thirst: -10,
-  toilet: +10,
-};
+const DAILY_CHANGE = { food: -10, ss: -10, thirst: -10, toilet: +10 };
 
-let isDrinking = false;
-let isSleeping = false;
+let isDrinking   = false;
+let isSleeping   = false;
 let isSharpening = false;
 
-let lastTickTime = null;
-let tickIntervalId = null;
+let lastTickTime    = null;
+let tickIntervalId  = null;
 
 export function startNeedsSystem() {
   if (tickIntervalId) return;
@@ -86,13 +53,8 @@ export function startNeedsSystem() {
 }
 
 export function stopNeedsSystem() {
-  if (tickIntervalId) {
-    clearInterval(tickIntervalId);
-    tickIntervalId = null;
-  }
-  isDrinking = false;
-  isSleeping = false;
-  isSharpening = false;
+  if (tickIntervalId) { clearInterval(tickIntervalId); tickIntervalId = null; }
+  isDrinking = false; isSleeping = false; isSharpening = false;
 }
 
 function tick() {
@@ -110,14 +72,8 @@ function tick() {
     changeNeed('thirst', (deltaMs / 10000) * 10);
     changeNeed('toilet', (deltaMs / 60000) * 20);
   }
-
-  if (isSleeping) {
-    changeNeed('e', (deltaMs / 60000) * 10);
-  }
-
-  if (isSharpening) {
-    changeNeed('ss', (deltaMs / 10000) * 10);
-  }
+  if (isSleeping)   changeNeed('e',  (deltaMs / 60000) * 10);
+  if (isSharpening) changeNeed('ss', (deltaMs / 10000) * 10);
 
   changeNeed('h', getMaxHealth() * 0.005 * dayFraction);
 }
@@ -128,63 +84,28 @@ function changeNeed(key, delta) {
   setNeedValue(key, current + delta);
 }
 
-const HUNT_FOOD = {
-  mouse: 10,
-  otter: 30,
-  eagle: 50,
-  rabbit: 10, 
-};
+const HUNT_FOOD = { mouse: 10, otter: 30, eagle: 50, rabbit: 10 };
 
 export function huntPrey(type) {
   const amount = HUNT_FOOD[type];
-  if (amount === undefined) {
-    console.warn(`Неизвестный тип добычи: ${type}`);
-    return;
-  }
+  if (amount === undefined) { console.warn(`Неизвестный тип добычи: ${type}`); return; }
   changeNeed('food', amount);
 }
-export function gainFood(amount) {
-  changeNeed('food', amount);
-}
-export function setDrinking(state) {
-  isDrinking = !!state;
-}
-export function setSleeping(state) {
-  isSleeping = !!state;
-}
-export function isCurrentlySleeping() {
-  return isSleeping;
-}
-export function setSharpening(state) {
-  isSharpening = !!state;
-}
-export function doTraining() {
-  changeNeed('e', -3);
-}
-export function damageHealth(amount) {
-  changeNeed('h', -amount);
-}
-export function healPercent(percent) {
-  changeNeed('h', getMaxHealth() * (percent / 100));
-}
-export function restSleep(amount = 5) {
-  changeNeed('e', amount);
-}
-export function sharpenClaws(amount = 100) {
-  changeNeed('ss', amount);
-  changeNeed('e', -5);
-}
-export function gainEnergy(amount) {
-  changeNeed('e', amount);
-}
-export function spendSleepForStrike(amount = 5) {
-  changeNeed('e', -amount);
-}
+export function gainFood(amount)         { changeNeed('food', amount); }
+export function setDrinking(s)           { isDrinking   = !!s; }
+export function setSleeping(s)           { isSleeping   = !!s; }
+export function isCurrentlySleeping()    { return isSleeping; }
+export function setSharpening(s)         { isSharpening = !!s; }
+export function doTraining()             { changeNeed('e', -3); }
+export function damageHealth(a)          { changeNeed('h', -a); }
+export function healPercent(p)           { changeNeed('h', getMaxHealth() * (p / 100)); }
+export function restSleep(a = 5)         { changeNeed('e', a); }
+export function sharpenClaws(a = 100)    { changeNeed('ss', a); changeNeed('e', -5); }
+export function gainEnergy(a)            { changeNeed('e', a); }
+export function spendSleepForStrike(a=5) { changeNeed('e', -a); }
 export function relieveNeed() {
   const current = getNeedValue('toilet');
-  if (current === null || current <= 0) {
-    return false;
-  }
+  if (current === null || current <= 0) return false;
   changeNeed('toilet', -20);
   return true;
 }

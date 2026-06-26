@@ -1,11 +1,3 @@
-// server/index.js
-// Точка входа. HTTP API + WebSocket игра.
-//
-// Переменные окружения:
-//   PORT        — порт (по умолчанию 8080)
-//   JWT_SECRET  — секрет для токенов (ОБЯЗАТЕЛЬНО задать на проде!)
-//   CLEAR_CHARS — если '1', очищает таблицу characters при старте (разовая миграция)
-
 const http                = require('http');
 const { WebSocketServer } = require('ws');
 const bcrypt              = require('bcrypt');
@@ -15,20 +7,6 @@ const db                  = require('./db');
 
 const PORT       = process.env.PORT       || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'warrcats_dev_secret_change_in_prod';
-
-// ─── Разовая очистка тестовых данных ─────────────────────────────────────────
-// Запусти один раз с CLEAR_CHARS=1:  CLEAR_CHARS=1 pm2 restart warrcats --update-env
-// После перезапуска убери переменную.
-if (process.env.CLEAR_CHARS === '1') {
-  const Database = require('better-sqlite3');
-  const path     = require('path');
-  const _db = new Database(path.join(__dirname, '..', 'warrcats.db'));
-  const info = _db.prepare('DELETE FROM characters').run();
-  _db.close();
-  console.log(`[startup] CLEAR_CHARS: удалено ${info.changes} персонажей`);
-}
-
-// ─── Вспомогательные функции ─────────────────────────────────────────────────
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -58,8 +36,6 @@ function genId(prefix = 'id') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ─── HTTP-сервер ──────────────────────────────────────────────────────────────
-
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -69,17 +45,14 @@ const server = http.createServer(async (req, res) => {
 
   const url = req.url.split('?')[0];
 
-  // ── Health ───────────────────────────────────────────────────────────────────
   if (url === '/health' && req.method === 'GET') {
     res.writeHead(200); res.end('ok'); return;
   }
 
-  // ── POST /api/register ───────────────────────────────────────────────────────
   if (url === '/api/register' && req.method === 'POST') {
     return send(res, 403, { error: 'Регистрация временно закрыта' });
   }
 
-  // ── POST /api/login ──────────────────────────────────────────────────────────
   if (url === '/api/login' && req.method === 'POST') {
     const { username, password } = await readBody(req);
     if (!username || !password)
@@ -100,7 +73,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { token, userId: user.id, username: user.username });
   }
 
-  // ── GET /api/me ──────────────────────────────────────────────────────────────
   if (url === '/api/me' && req.method === 'GET') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
@@ -109,7 +81,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { userId: payload.userId, username: payload.username, characters });
   }
 
-  // ── GET /api/servers ─────────────────────────────────────────────────────────
   if (url === '/api/servers' && req.method === 'GET') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
@@ -121,7 +92,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { servers });
   }
 
-  // ── POST /api/servers ────────────────────────────────────────────────────────
   if (url === '/api/servers' && req.method === 'POST') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
@@ -135,76 +105,73 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { server: srv });
   }
 
-  // ── DELETE /api/servers/:id ──────────────────────────────────────────────────
   const deleteSrvMatch = url.match(/^\/api\/servers\/([^/]+)$/);
   if (deleteSrvMatch && req.method === 'DELETE') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
-
     db.deleteServerDB(deleteSrvMatch[1], payload.userId);
     return send(res, 200, { ok: true });
   }
 
-  // ── POST /api/characters ─────────────────────────────────────────────────────
-  // Создание или полное обновление персонажа (из редактора).
-  // Запрещаем менять name/role/age_moons если персонаж уже существует.
   if (url === '/api/characters' && req.method === 'POST') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
 
     const body = await readBody(req);
-    const isNew = !body.id;
 
-    // Клиент хранит возраст в поле `age`, сервер — в `age_moons`. Маппируем.
-    const incomingMoons = body.age_moons ?? body.age ?? 0;
-
-    if (isNew) {
-      body.id               = genId('char');
-      body.user_id          = payload.userId;
-      body.age_moons        = incomingMoons;
-      body.last_moon_update = Math.floor(Date.now() / 1000);
-      body.h                = body.max_h ?? 30;
-      body.max_health       = body.max_h ?? 30;
-      body.e                = 100;
-      body.food             = 100;
-      body.thirst           = 100;
-      body.ss               = 100;
-      body.xp               = 0;
-    } else {
+    if (body.id) {
       const existing = db.getCharacter(body.id);
       if (!existing || existing.user_id !== payload.userId)
         return send(res, 403, { error: 'Нет доступа' });
 
-      body.name             = existing.name;
-      body.role             = existing.role;
-      body.age_moons        = incomingMoons;
-      body.last_moon_update = existing.last_moon_update;
-      body.user_id          = payload.userId;
+      db.updateCharacterAppearance(body.id, payload.userId, {
+        tribe:      body.tribe      ?? existing.tribe,
+        build:      body.build      ?? existing.build,
+        size:       body.size       ?? existing.size,
+        appearance: body.appearance ?? existing.appearance,
+      });
+      const saved = db.getCharacter(body.id);
+      console.log(`[char] внешность обновлена: ${saved.name} (${saved.id}) → ${payload.username}`);
+      return send(res, 200, { character: saved });
     }
 
-    db.saveCharacter(body);
-    const saved = db.getCharacter(body.id);
-    console.log(`[char] ${isNew ? 'создан' : 'обновлён'}: ${saved.name} (${saved.id}) → ${payload.username}`);
+    const id    = genId('char');
+    const max_h = body.max_h ?? 30;
+    db.insertCharacter({
+      id,
+      user_id:          payload.userId,
+      name:             (body.name ?? 'Безымянный').toString().slice(0, 40),
+      tribe:            body.tribe,
+      role:             body.role ?? 'Котёнок',
+      age_moons:        0,
+      last_moon_update: Math.floor(Date.now() / 1000),
+      build:            body.build ?? 'lean',
+      size:             body.size  ?? 0.7,
+      appearance:       body.appearance ?? null,
+      h:                max_h,
+      max_h:            max_h,
+      max_health:       max_h,
+      e:                100,
+      food:             100,
+      thirst:           100,
+      ss:               100,
+      toilet:           0,
+      xp:               0,
+      move_states:      null,
+      sleep_bonuses:    null,
+      parents:          null,
+      mate:             null,
+      kittens:          null,
+      inventory:        [],
+      achievements:     [],
+    });
+    const saved = db.getCharacter(id);
+    console.log(`[char] создан: ${saved.name} (${saved.id}) → ${payload.username}`);
     return send(res, 200, { character: saved });
   }
 
-  // ── PATCH /api/characters/:id ────────────────────────────────────────────────
-  // Частичный флаш игрового состояния (xp, нужды, здоровье).
-  // Вызывается debounced-тикером раз в 3 сек и при выходе из игры.
   const charIdMatch = url.match(/^\/api\/characters\/([^/]+)$/);
 
-  if (charIdMatch && req.method === 'PATCH') {
-    const payload = verifyToken(req);
-    if (!payload) return send(res, 401, { error: 'Нет авторизации' });
-
-    const state = await readBody(req);
-    db.patchCharacterState(charIdMatch[1], payload.userId, state);
-    return send(res, 200, { ok: true });
-  }
-
-  // ── GET /api/characters/:id ──────────────────────────────────────────────────
-  // Получить одного персонажа (нужно клиенту при старте игры, чтобы загрузить
-  // актуальное состояние с сервера вместо чтения из localStorage).
   if (charIdMatch && req.method === 'GET') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
@@ -216,11 +183,9 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { character: char });
   }
 
-  // ── DELETE /api/characters/:id ───────────────────────────────────────────────
   if (charIdMatch && req.method === 'DELETE') {
     const payload = verifyToken(req);
     if (!payload) return send(res, 401, { error: 'Нет авторизации' });
-
     db.deleteCharacterDB(charIdMatch[1], payload.userId);
     return send(res, 200, { ok: true });
   }
@@ -228,40 +193,42 @@ const server = http.createServer(async (req, res) => {
   send(res, 404, { error: 'Not found' });
 });
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
-
 const wss  = new WebSocketServer({ server, path: '/ws' });
 const room = new Room();
 
 wss.on('connection', (ws, req) => {
   console.log(`[ws] подключение от ${req.socket.remoteAddress}`);
-
   let player = null;
 
   ws.once('message', (raw) => {
-    let charData = null;
+    let hello = null;
     try {
       const msg = JSON.parse(raw);
-      if (msg.type === 'hello' && msg.payload) charData = msg.payload;
+      if (msg.type === 'hello' && msg.payload) hello = msg.payload;
     } catch {}
 
-    // Гостевого режима нет — обязателен валидный JWT
-    if (!charData?.token) {
+    if (!hello?.token) {
       ws.close(4001, 'Нет авторизации');
       return;
     }
 
-    try {
-      const p = jwt.verify(charData.token, JWT_SECRET);
-      charData.userId   = p.userId;
-      charData.username = p.username;
-    } catch {
-      ws.close(4001, 'Токен невалиден или истёк');
+    let userPayload;
+    try { userPayload = jwt.verify(hello.token, JWT_SECRET); }
+    catch { ws.close(4001, 'Токен невалиден или истёк'); return; }
+
+    const charId = hello.charId;
+    if (!charId) {
+      ws.close(4002, 'Не выбран персонаж');
       return;
     }
-    delete charData.token;
 
-    player = room.addPlayer(ws, charData);
+    const char = db.getCharacter(charId);
+    if (!char || char.user_id !== userPayload.userId) {
+      ws.close(4003, 'Персонаж не найден или нет доступа');
+      return;
+    }
+
+    player = room.addPlayer(ws, char);
 
     ws.on('message', (raw2) => {
       try { room.handleMessage(player, JSON.parse(raw2)); }
@@ -276,7 +243,6 @@ wss.on('connection', (ws, req) => {
   ws.on('pong', () => { ws.isAlive = true; });
 });
 
-// Heartbeat
 const heartbeat = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (!ws.isAlive) { ws.terminate(); return; }

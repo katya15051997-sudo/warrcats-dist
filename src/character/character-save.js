@@ -1,228 +1,150 @@
-// character-save.js
-// Сохранение и загрузка персонажей — все настройки редактора.
-//
-// Что изменилось по сравнению с предыдущей версией:
-//   • Список персонажей и активный персонаж кэшируются в памяти модуля —
-//     loadCharacters/getActiveCharacter больше не парсят JSON из localStorage
-//     при каждом вызове. saveCharacter делает ровно один setItem вместо
-//     read-parse-modify-stringify-write.
-//   • Глубокое копирование app через structuredClone, без JSON-туда-обратно.
-//   • getCharacterStorageKey читает активного персонажа один раз, а не два.
-//   • mergeServerCharacters(list) — массовый импорт с сервера: один merge,
-//     один write. Заменяет цикл `forEach(saveCharacter)`, который раньше
-//     делал N полных read+write по localStorage.
-//   • deleteCharacter возвращает оставшийся список — вызывающему коду больше
-//     не нужно повторно loadCharacters() сразу после удаления.
-//   • Слушаем storage-event, чтобы при правках из другой вкладки кэш
-//     инвалидировался и мы не перетёрли свежие данные.
+import { apiGet, apiPost, apiDelete } from '../net/api.js';
 
-const STORAGE_KEY = 'warrcats_characters';
-const ACTIVE_KEY  = 'warrcats_active_character';
+const ACTIVE_ID_KEY = 'warrcats_active_char_id';
 
-// ─── Внутренние кэши ────────────────────────────────────────────────────────
-let _charsCache = null;          // массив; null = ещё не читали из localStorage
-let _activeCache = null;         // объект или null; используем флаг ниже,
-let _activeLoaded = false;       // чтобы отличать «не загружали» от «нет активного»
-let _guestSessionId = null;
+let _characters = [];
+let _activeId   = null;
 
-// structuredClone есть везде, где работает Pixi.js (Chrome 98+/FF 94+/Safari 15.4+).
-// Оставляем фолбэк на JSON-копию для совсем старых окружений (старые тесты и т.п.).
-const _deepClone = typeof structuredClone === 'function'
-  ? structuredClone
-  : (v => JSON.parse(JSON.stringify(v)));
-
-// Если другая вкладка изменила хранилище — сбросим кэш, иначе мы могли бы
-// при следующем write перетереть свежие данные устаревшим in-memory снимком.
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('storage', (e) => {
-    if (e.key === STORAGE_KEY) _charsCache = null;
-    if (e.key === ACTIVE_KEY)  { _activeCache = null; _activeLoaded = false; }
-  });
-}
-
-// ─── Внутренние хелперы list ────────────────────────────────────────────────
-function _readChars() {
-  if (_charsCache !== null) return _charsCache;
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) { _charsCache = parsed; return _charsCache; }
-    }
-  } catch (e) {
-    console.error('Ошибка загрузки персонажей:', e);
-  }
-  _charsCache = [];
-  return _charsCache;
-}
-
-function _writeChars() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(_charsCache));
-  } catch (e) {
-    console.error('Ошибка сохранения персонажей:', e);
-  }
-}
-
-// ─── Публичный API: список персонажей ───────────────────────────────────────
-export function loadCharacters() {
-  // Возвращаем поверхностную копию массива, чтобы внешние filter/splice/sort
-  // у вызывающего кода не портили внутренний кэш.
-  return _readChars().slice();
-}
-
-// Генератор гарантированно уникального id (Date.now() может совпасть при
-// быстрых повторных вызовах в одну и ту же миллисекунду — это раньше могло
-// приводить к коллизии id у разных персонажей и, как следствие, к «общим»
-// потребностям/умениям, хранящимся под одним и тем же ключом).
-let idCounter = 0;
-function generateCharacterId() {
-  idCounter += 1;
-  return 'char_' + Date.now() + '_' + idCounter + '_' + Math.random().toString(36).slice(2, 8);
-}
-
-export function saveCharacter(charData) {
-  const chars = _readChars();
-
-  // Если у переданных данных есть id существующего персонажа — обновляем
-  // запись на месте, не создавая нового id (иначе при каждом сохранении
-  // персонаж клонировался бы под новым id, а старые потребности/умения/опыт
-  // оставались бы привязаны к прежнему, уже неиспользуемому id).
-  const existingIndex = charData.id ? chars.findIndex(c => c.id === charData.id) : -1;
-
-  const char = {
-    id:      existingIndex >= 0 ? charData.id : generateCharacterId(),
-    savedAt: Date.now(),
-    name:    charData.name,
-    tribe:   charData.tribe,
-    role:    charData.role,
-    age:     charData.age,
-    size:    charData.size,
-    build:   charData.build,
-    app:     charData.app ? _deepClone(charData.app) : charData.app,
-  };
-
-  if (existingIndex >= 0) chars[existingIndex] = char;
-  else chars.push(char);
-
-  _writeChars();
+function _enrich(char) {
+  if (!char || typeof char !== 'object') return char;
+  if (char.appearance !== undefined && char.app === undefined)        char.app = char.appearance;
+  if (char.age_moons   !== undefined && char.age === undefined)        char.age = char.age_moons;
+  if (char.max_h       !== undefined && char.maxHealth === undefined)  char.maxHealth = char.max_h;
   return char;
 }
 
-// Массовый импорт персонажей с сервера. Заменяет шаблон
-//   serverChars.forEach(c => saveCharacter(c));
-// который делал N полных read+write-циклов localStorage. Здесь — один merge,
-// один setItem, один JSON.stringify.
-export function mergeServerCharacters(list) {
-  if (!Array.isArray(list) || list.length === 0) return;
-  const chars = _readChars();
-  const indexById = new Map(chars.map((c, i) => [c.id, i]));
-  const now = Date.now();
-
-  for (const incoming of list) {
-    const id = incoming.id ?? generateCharacterId();
-    const merged = {
-      id,
-      savedAt: now,
-      name:    incoming.name,
-      tribe:   incoming.tribe,
-      role:    incoming.role,
-      age:     incoming.age,
-      size:    incoming.size,
-      build:   incoming.build,
-      app:     incoming.app ? _deepClone(incoming.app) : incoming.app,
-    };
-    const idx = indexById.get(id);
-    if (idx !== undefined) {
-      chars[idx] = merged;
-    } else {
-      indexById.set(id, chars.length);
-      chars.push(merged);
-    }
-  }
-
-  _writeChars();
-}
-
-// Возвращает оставшийся список — вызывающему коду не нужно сразу после
-// удаления делать ещё один loadCharacters().filter(...).
-export function deleteCharacter(id) {
-  const chars = _readChars();
-  const idx = chars.findIndex(c => c.id === id);
-  if (idx >= 0) {
-    chars.splice(idx, 1);
-    _writeChars();
-  }
-  return chars.slice();
-}
-
-// ─── Активный персонаж ──────────────────────────────────────────────────────
-export function setActiveCharacter(charData) {
-  if (charData && !charData.id) {
-    // У персонажа нет id — генерируем его на месте, чтобы потребности/умения
-    // НЕ свалились в общий ключ "_default" (что приводило бы к переносу
-    // прогресса между персонажами).
-    charData = { ...charData, id: generateCharacterId() };
-  }
-  _activeCache = charData ?? null;
-  _activeLoaded = true;
+export async function loadCharactersFromServer() {
   try {
-    if (charData) localStorage.setItem(ACTIVE_KEY, JSON.stringify(charData));
-    else          localStorage.removeItem(ACTIVE_KEY);
+    const data = await apiGet('/api/me');
+    _characters = Array.isArray(data?.characters) ? data.characters.map(_enrich) : [];
   } catch (e) {
-    console.error('Ошибка сохранения активного персонажа:', e);
+    console.warn('Не удалось загрузить персонажей:', e.message);
+    _characters = [];
   }
+
+  const savedId = localStorage.getItem(ACTIVE_ID_KEY);
+  if (savedId && _characters.some(c => c.id === savedId)) {
+    _activeId = savedId;
+  } else if (_characters.length > 0) {
+    _activeId = _characters[0].id;
+    localStorage.setItem(ACTIVE_ID_KEY, _activeId);
+  } else {
+    _activeId = null;
+    localStorage.removeItem(ACTIVE_ID_KEY);
+  }
+
+  return getCharacters();
+}
+
+export function getCharacters() {
+  return _characters.slice();
+}
+
+export function loadCharacters() {
+  return getCharacters();
 }
 
 export function getActiveCharacter() {
-  if (_activeLoaded) return _activeCache;
-  try {
-    const saved = localStorage.getItem(ACTIVE_KEY);
-    _activeCache = saved ? JSON.parse(saved) : null;
-  } catch (e) {
-    console.error('Ошибка загрузки активного персонажа:', e);
-    _activeCache = null;
-  }
-  _activeLoaded = true;
-  return _activeCache;
+  if (!_activeId) return null;
+  return _characters.find(c => c.id === _activeId) || null;
 }
 
 export function getActiveCharacterId() {
-  return getActiveCharacter()?.id ?? null;
+  return _activeId;
+}
+
+export function setActiveCharacter(charOrId) {
+  if (!charOrId) {
+    _activeId = null;
+    localStorage.removeItem(ACTIVE_ID_KEY);
+    return null;
+  }
+  const id = typeof charOrId === 'string' ? charOrId : charOrId.id;
+  if (!id) return null;
+
+  if (typeof charOrId === 'object' && charOrId.id) {
+    _enrich(charOrId);
+    const idx = _characters.findIndex(c => c.id === charOrId.id);
+    if (idx >= 0) _characters[idx] = charOrId;
+    else _characters.push(charOrId);
+  }
+
+  _activeId = id;
+  localStorage.setItem(ACTIVE_ID_KEY, id);
+  return getActiveCharacter();
+}
+
+export async function createCharacter(data) {
+  const res  = await apiPost('/api/characters', data);
+  const char = _enrich(res.character || res);
+  _characters.push(char);
+  setActiveCharacter(char.id);
+  return char;
+}
+
+export async function updateCharacterAppearance(charId, data) {
+  const res  = await apiPost('/api/characters', { ...data, id: charId });
+  const char = _enrich(res.character || res);
+  const idx  = _characters.findIndex(c => c.id === charId);
+  if (idx >= 0) _characters[idx] = char;
+  else _characters.push(char);
+  return char;
+}
+
+export async function saveCharacter(data) {
+  if (data?.id && _characters.some(c => c.id === data.id)) {
+    return updateCharacterAppearance(data.id, data);
+  }
+  return createCharacter(data);
+}
+
+export async function deleteCharacter(id) {
+  try { await apiDelete(`/api/characters/${id}`); }
+  catch (e) { console.warn('Не удалось удалить персонажа:', e.message); }
+  _characters = _characters.filter(c => c.id !== id);
+  if (_activeId === id) setActiveCharacter(_characters[0]?.id ?? null);
+  return getCharacters();
+}
+
+export function patchActiveState(partial) {
+  const active = getActiveCharacter();
+  if (!active || !partial) return null;
+  for (const [k, v] of Object.entries(partial)) {
+    active[k] = v;
+    if (k === 'appearance') active.app = v;
+    if (k === 'age_moons')  active.age = v;
+    if (k === 'max_h')      active.maxHealth = v;
+  }
+  return active;
+}
+
+export function replaceActiveCharacter(char) {
+  if (!char || !char.id) return null;
+  _enrich(char);
+  const idx = _characters.findIndex(c => c.id === char.id);
+  if (idx >= 0) _characters[idx] = char;
+  else _characters.push(char);
+  _activeId = char.id;
+  localStorage.setItem(ACTIVE_ID_KEY, char.id);
+  return char;
+}
+
+export function getCurrentStateSnapshot() {
+  const a = getActiveCharacter();
+  if (!a) return null;
+  return {
+    h: a.h, max_h: a.max_h, max_health: a.max_health,
+    e: a.e, food: a.food, thirst: a.thirst, ss: a.ss, toilet: a.toilet,
+    xp: a.xp,
+    move_states: a.move_states,
+    sleep_bonuses: a.sleep_bonuses,
+    age_moons: a.age_moons,
+    last_moon_update: a.last_moon_update,
+    parents: a.parents, mate: a.mate, kittens: a.kittens,
+    inventory: a.inventory, achievements: a.achievements,
+  };
 }
 
 export function getCharacterStorageKey(baseKey) {
-  // Одно чтение активного вместо двух (раньше getActiveCharacterId сам
-  // лазил в localStorage, а потом ниже мы лезли туда же ещё раз).
-  const active = getActiveCharacter();
-  if (active?.id) return `${baseKey}_${active.id}`;
-
-  if (active) {
-    // У активного нет id — выдаём ему устойчивый, чтобы данные системы
-    // не сваливались в общий бакет и не смешивались между персонажами.
-    const newId = generateCharacterId();
-    setActiveCharacter({ ...active, id: newId });
-    return `${baseKey}_${newId}`;
-  }
-
-  // Совсем нет активного персонажа (гость без сохранений) — изолируем по
-  // временному ключу сессии, который не переживёт перезапуск.
-  if (!_guestSessionId) _guestSessionId = generateCharacterId();
-  return `${baseKey}_${_guestSessionId}`;
-}
-
-// ─── Полный сброс ───────────────────────────────────────────────────────────
-// Удаляет из localStorage все ключи с префиксом "warrcats_", кроме списка
-// серверов (warrcats_servers). Необратимо — использовать с подтверждением в UI.
-export function resetAllCharacters() {
-  try {
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('warrcats_') && k !== 'warrcats_servers')
-      .forEach(k => localStorage.removeItem(k));
-  } catch (e) {
-    console.error('Ошибка сброса всех персонажей:', e);
-  }
-  _charsCache = null;
-  _activeCache = null;
-  _activeLoaded = false;
+  return `${baseKey}_${_activeId ?? 'none'}`;
 }

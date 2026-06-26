@@ -11,8 +11,7 @@
 // onSaved — вызывается с сохранённым персонажем после успешного "Сохранить".
 
 import * as PIXI from 'pixi.js';
-import { saveCharacter, setActiveCharacter } from '../character/character-save.js';
-import { apiSaveCharacter } from '../net/api.js';
+import { createCharacter, setActiveCharacter } from '../character/character-save.js';
 import { applyCharacterBuild, applyCharacterColors, applyEyeColor } from '../character/character.js';
 import { buildImg, bodyToFilter } from '../character/character-preview.js';
 import { injectGameStyles } from '../styles.js';
@@ -584,11 +583,25 @@ export function showCharacterEditor(initial = null, onSaved = null) {
 
   
   footer.querySelector('#ce-cancel').addEventListener('click', () => { destroyPreview(); editorStyle.remove(); overlay.remove(); });
-  footer.querySelector('#ce-save').addEventListener('click', () => {
+  footer.querySelector('#ce-save').addEventListener('click', async () => {
     const lockedSize = getLockedSize(st.age);
     if (lockedSize !== null) st.size = lockedSize;
-    const saved = saveCharacter(st);
-    setActiveCharacter(saved);
+
+    let saved;
+    try {
+      saved = await createCharacter({
+        name:       st.name,
+        tribe:      st.tribe,
+        role:       st.role,
+        build:      st.build,
+        size:       st.size,
+        appearance: st.app,
+      });
+    } catch (e) {
+      console.warn('Сервер:', e);
+      alert('Не удалось сохранить котика: ' + (e.message ?? e));
+      return;
+    }
 
     destroyPreview();
     editorStyle.remove();
@@ -601,11 +614,6 @@ export function showCharacterEditor(initial = null, onSaved = null) {
     setTimeout(() => confirmBanner.remove(), 2000);
 
     if (typeof onSaved === 'function') onSaved(saved);
-
-    if (window.currentUser?.userId) {
-      apiSaveCharacter({ ...saved, user_id: window.currentUser.userId })
-        .catch(e => console.warn('Сервер:', e));
-    }
   });
 
   

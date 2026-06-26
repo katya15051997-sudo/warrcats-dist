@@ -1,109 +1,101 @@
-// server/room.js
-// Игровая комната: держит всех подключённых игроков, обрабатывает
-// сообщения, управляет спаррингом и делегирует бою/дичи.
-
 const { MSG }       = require('./protocol');
 const { GameLoop }  = require('./gameLoop');
 const { PreyServer} = require('./preyServer');
-const { saveCharacter, logChat, getRecentChat } = require('./db');
+const { patchCharacterState, logChat, getRecentChat } = require('./db');
 
-const STRIKE_RADIUS     = 120; // px — радиус удара по игроку
-const SAVE_INTERVAL_MS  = 30 * 1000; // сохраняем каждые 30 сек
-const SPARRING_TIMEOUT  = 15 * 1000; // 15 сек на принятие приглашения
-const SPARRING_ENERGY_COST = 5;      // −5 бодрости каждому за спарринг
+const STRIKE_RADIUS        = 120;
+const SAVE_INTERVAL_MS     = 10 * 1000;
+const SPARRING_TIMEOUT     = 15 * 1000;
+const SPARRING_ENERGY_COST = 5;
 
 let nextConnId = 1;
 
 class Room {
   constructor() {
-    this.players  = new Map(); // connId → player
-    this.prey     = new PreyServer(this);
-    this.loop     = new GameLoop(this);
+    this.players = new Map();
+    this.prey    = new PreyServer(this);
+    this.loop    = new GameLoop(this);
     this.loop.start();
 
-    // Периодическое сохранение всех игроков в БД
     setInterval(() => this._saveAll(), SAVE_INTERVAL_MS);
   }
 
-  // ─── Подключение / отключение ────────────────────────────────────────────
-
-  addPlayer(ws, charData) {
+  addPlayer(ws, char) {
     const id = nextConnId++;
 
     const player = {
-      id,
-      ws,
-      // Данные персонажа (приходят с клиента при подключении)
-      charId:   charData?.id    ?? `anon_${id}`,
-      name:     charData?.name  ?? `Кот ${id}`,
-      build:    charData?.build ?? 'lean',
-      appearance: charData?.appearance ?? null,
-      // Игровое состояние
-      x:        charData?.x     ?? 400,
-      y:        charData?.y     ?? 400,
-      facingLeft: false,
-      walking:  false,
-      h:        charData?.h     ?? 100,
-      max_h:    charData?.max_h ?? 30,
-      e:        charData?.e     ?? 100,
-      food:     charData?.food  ?? 100,
-      thirst:   charData?.thirst?? 100,
-      ss:       charData?.ss    ?? 100,
-      xp:       charData?.xp   ?? 0,
-      size:     charData?.size ?? 0.7,
-      pose:     'normal',
-      // Спарринг
-      sparringPending: null, // { fromId, timeoutHandle }
+      id, ws,
+      charId:    char.id,
+      userId:    char.user_id,
+      name:      char.name,
+      tribe:     char.tribe,
+      role:      char.role,
+      age_moons: char.age_moons ?? 0,
+      last_moon_update: char.last_moon_update ?? null,
+      build:     char.build ?? 'lean',
+      size:      char.size  ?? 0.7,
+      appearance: char.appearance ?? null,
+      x: 400, y: 400, facingLeft: false, walking: false,
+      h:          char.h          ?? 30,
+      max_h:      char.max_h      ?? 30,
+      max_health: char.max_health ?? 30,
+      e:          char.e          ?? 100,
+      food:       char.food       ?? 100,
+      thirst:     char.thirst     ?? 100,
+      ss:         char.ss         ?? 100,
+      toilet:     char.toilet     ?? 0,
+      xp:         char.xp         ?? 0,
+      move_states:   char.move_states   ?? null,
+      sleep_bonuses: char.sleep_bonuses ?? null,
+      parents:      char.parents      ?? null,
+      mate:         char.mate         ?? null,
+      kittens:      char.kittens      ?? null,
+      inventory:    char.inventory    ?? null,
+      achievements: char.achievements ?? null,
+      pose: 'normal',
+      sparringPending: null,
+      activeSparring:  null,
     };
 
     this.players.set(id, player);
 
-    // Отправляем новому игроку его id + снапшот мира + историю чата
     this._send(ws, {
       type: MSG.INIT,
       payload: {
-        myId:    id,
-        players: this.getPlayersSnapshot(),
-        prey:    this.prey.getSnapshot(),
-        period:  this.loop.getCurrentPeriod(),
-        chat:    getRecentChat().slice(-50),
+        myId:      id,
+        character: this._fullCharForOwner(player),
+        players:   this.getPlayersSnapshot(),
+        prey:      this.prey.getSnapshot(),
+        period:    this.loop.getCurrentPeriod(),
+        chat:      getRecentChat().slice(-50),
       },
     });
 
-    // Всем остальным — что вошёл новый
     this.broadcast(
       { type: MSG.PLAYER_JOIN, payload: this._playerDTO(player) },
       ws
     );
 
-    console.log(`[room] +${player.name} (id=${id}), всего: ${this.players.size}`);
+    console.log(`[room] +${player.name} (id=${id}, char=${player.charId}), всего: ${this.players.size}`);
     return player;
   }
 
   removePlayer(id) {
     const player = this.players.get(id);
     if (!player) return;
-
-    // Сохраняем перед выходом
-    saveCharacter(this._toDBRecord(player));
-
+    this._flushPlayer(player);
     this.players.delete(id);
     this.broadcast({ type: MSG.PLAYER_LEAVE, payload: { id } });
     console.log(`[room] −id=${id}, осталось: ${this.players.size}`);
   }
 
-  // ─── Обработка входящих сообщений ────────────────────────────────────────
-
   handleMessage(player, msg) {
     switch (msg.type) {
-
       case MSG.MOVE:
-        // Доверяем клиенту позицию (авторитетный клиент для движения).
-        // При читерстве — добавить серверную валидацию скорости.
         player.x          = msg.payload.x          ?? player.x;
         player.y          = msg.payload.y          ?? player.y;
-        player.facingLeft = msg.payload.facingLeft  ?? player.facingLeft;
-        player.walking    = msg.payload.walking     ?? player.walking;
+        player.facingLeft = msg.payload.facingLeft ?? player.facingLeft;
+        player.walking    = msg.payload.walking    ?? player.walking;
         break;
 
       case MSG.STRIKE:
@@ -130,13 +122,8 @@ class Room {
         this._handleSparringHit(player, msg.payload.damage ?? 10);
         break;
 
-      case MSG.NEEDS_SYNC:
-        // Клиент периодически сообщает актуальные потребности (для сохранения)
-        player.h      = msg.payload.h      ?? player.h;
-        player.e      = msg.payload.e      ?? player.e;
-        player.food   = msg.payload.food   ?? player.food;
-        player.thirst = msg.payload.thirst ?? player.thirst;
-        player.ss     = msg.payload.ss     ?? player.ss;
+      case MSG.STATE_SYNC:
+        this._handleStateSync(player, msg.payload);
         break;
 
       case 'pose':
@@ -148,7 +135,18 @@ class Room {
     }
   }
 
-  // ─── Бой ─────────────────────────────────────────────────────────────────
+  _handleStateSync(p, payload) {
+    if (!payload) return;
+    const fields = [
+      'h','max_h','max_health','e','food','thirst','ss','toilet',
+      'xp','move_states','sleep_bonuses',
+      'age_moons','last_moon_update',
+      'parents','mate','kittens','inventory','achievements',
+    ];
+    for (const f of fields) {
+      if (payload[f] !== undefined) p[f] = payload[f];
+    }
+  }
 
   _handleStrike(attacker, payload) {
     const { targetId, type } = payload;
@@ -156,7 +154,6 @@ class Room {
     if (type === 'prey') {
       const result = this.prey.strike(attacker, attacker.x, attacker.y);
       if (result?.killed) {
-        // Начислим сытость атакующему (сервер сообщает клиенту)
         this._send(attacker.ws, {
           type: MSG.SELF_STRIKE_RES,
           payload: { preyKilled: true, food: result.cfg.food },
@@ -173,7 +170,7 @@ class Room {
       const dy = target.y - attacker.y;
       if (Math.sqrt(dx*dx + dy*dy) > STRIKE_RADIUS) return;
 
-      const damage = 3 + Math.floor(Math.random() * 7); // 3–10
+      const damage = 3 + Math.floor(Math.random() * 7);
       target.h = Math.max(0, target.h - damage);
 
       this.broadcast({
@@ -182,12 +179,7 @@ class Room {
       });
       return;
     }
-
-    // type === 'fox' — лиса на карте у каждого клиента своя (NPC, не серверный)
-    // Можно перенести сюда при необходимости
   }
-
-  // ─── Чат ─────────────────────────────────────────────────────────────────
 
   _handleChat(player, payload) {
     const text = String(payload.text ?? '').trim().slice(0, 200);
@@ -201,16 +193,11 @@ class Room {
     });
   }
 
-  // ─── Спарринг ────────────────────────────────────────────────────────────
-
   _handleSparringInvite(from, targetId) {
     const target = this.players.get(targetId);
     if (!target) return;
 
-    // Отменяем старый запрос от этого игрока, если был
-    if (from.sparringPending) {
-      clearTimeout(from.sparringPending.timeoutHandle);
-    }
+    if (from.sparringPending) clearTimeout(from.sparringPending.timeoutHandle);
 
     const timeoutHandle = setTimeout(() => {
       from.sparringPending = null;
@@ -222,7 +209,6 @@ class Room {
 
     from.sparringPending = { targetId, timeoutHandle };
 
-    // Просим target дать согласие
     this._send(target.ws, {
       type: MSG.SPARRING_REQ,
       payload: { fromId: from.id, fromName: from.name },
@@ -237,8 +223,6 @@ class Room {
     clearTimeout(initiator.sparringPending.timeoutHandle);
     initiator.sparringPending = null;
 
-    // Запускаем спарринг со шкалами выносливости
-    // Сохраняем состояние активного спарринга
     initiator.activeSparring = acceptor.id;
     acceptor.activeSparring  = initiator.id;
 
@@ -257,23 +241,15 @@ class Room {
     const opponent = this.players.get(from.activeSparring);
     if (!opponent) return;
 
-    // Сообщаем сопернику что его ударили
-    this._send(opponent.ws, {
-      type: 'sparring_hit_me',
-      payload: { damage },
-    });
-    // Сообщаем атакующему что удар прошёл
-    this._send(from.ws, {
-      type: 'sparring_hit_opponent',
-      payload: { damage },
-    });
+    this._send(opponent.ws, { type: 'sparring_hit_me',       payload: { damage } });
+    this._send(from.ws,     { type: 'sparring_hit_opponent', payload: { damage } });
   }
 
   _endSparring(p1Id, p2Id) {
     const p1 = this.players.get(p1Id);
     const p2 = this.players.get(p2Id);
-    if (p1) { p1.activeSparring = null; p1.e = Math.max(0, (p1.e ?? 100) - 5); }
-    if (p2) { p2.activeSparring = null; p2.e = Math.max(0, (p2.e ?? 100) - 5); }
+    if (p1) { p1.activeSparring = null; p1.e = Math.max(0, (p1.e ?? 100) - SPARRING_ENERGY_COST); }
+    if (p2) { p2.activeSparring = null; p2.e = Math.max(0, (p2.e ?? 100) - SPARRING_ENERGY_COST); }
   }
 
   _handleSparringReject(rejector, fromId) {
@@ -289,13 +265,10 @@ class Room {
     });
   }
 
-  // ─── Снапшоты / отправка ─────────────────────────────────────────────────
-
   getPlayersSnapshot() {
     return [...this.players.values()].map(this._playerDTO);
   }
 
-  // GameLoop вызывает это для тика дичи
   tickPrey()        { this.prey.tick(); }
   getPreySnapshot() { return this.prey.getSnapshot(); }
 
@@ -307,6 +280,20 @@ class Room {
       h: Math.round(p.h), max_h: Math.round(p.max_h), e: Math.round(p.e),
       pose: p.pose ?? 'normal',
       size: p.size ?? 0.7,
+    };
+  }
+
+  _fullCharForOwner(p) {
+    return {
+      id: p.charId, user_id: p.userId,
+      name: p.name, tribe: p.tribe, role: p.role,
+      age_moons: p.age_moons, last_moon_update: p.last_moon_update,
+      build: p.build, size: p.size, appearance: p.appearance,
+      h: p.h, max_h: p.max_h, max_health: p.max_health,
+      e: p.e, food: p.food, thirst: p.thirst, ss: p.ss, toilet: p.toilet,
+      xp: p.xp, move_states: p.move_states, sleep_bonuses: p.sleep_bonuses,
+      parents: p.parents, mate: p.mate, kittens: p.kittens,
+      inventory: p.inventory, achievements: p.achievements,
     };
   }
 
@@ -323,22 +310,27 @@ class Room {
     }
   }
 
-  // ─── Сохранение ──────────────────────────────────────────────────────────
-
-  _saveAll() {
-    for (const p of this.players.values()) {
-      saveCharacter(this._toDBRecord(p));
+  _flushPlayer(p) {
+    if (!p.charId || !p.userId) return;
+    try {
+      patchCharacterState(p.charId, p.userId, {
+        h: p.h, max_h: p.max_h, max_health: p.max_health,
+        e: p.e, food: p.food, thirst: p.thirst, ss: p.ss, toilet: p.toilet,
+        xp: p.xp,
+        move_states: p.move_states,
+        sleep_bonuses: p.sleep_bonuses,
+        age_moons: p.age_moons,
+        last_moon_update: p.last_moon_update,
+        parents: p.parents, mate: p.mate, kittens: p.kittens,
+        inventory: p.inventory, achievements: p.achievements,
+      });
+    } catch (e) {
+      console.warn(`[room] ошибка сохранения char=${p.charId}:`, e.message);
     }
   }
 
-  _toDBRecord(p) {
-    return {
-      id: p.charId, name: p.name, build: p.build,
-      appearance: p.appearance,
-      xp: p.xp,
-      h: p.h, max_h: p.max_h, e: p.e,
-      food: p.food, thirst: p.thirst, ss: p.ss,
-    };
+  _saveAll() {
+    for (const p of this.players.values()) this._flushPlayer(p);
   }
 }
 

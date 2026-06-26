@@ -1,41 +1,28 @@
 import { currentSettings } from '../config/game-settings.js';
 import { getProfile, getMaxHealth, getHealth, setHealth } from '../character/character-profile.js';
 import { getCurrentPeriod, getTimeUntilNextPeriod } from '../systems/day-night-cycle.js';
-import { getXp, getRank, RANKS, MOVES, getMoveState, isTierUnlocked, startLearningMove, getCalculatedDamage, getSelectedMoveId } from '../systems/xp-system.js';
+import { getXp, getRank, RANKS, MOVES, getMoveState, isTierUnlocked, startLearningMove, getCalculatedDamage, getSelectedMoveId, isMoveLearned } from '../systems/xp-system.js';
 import { getMaxSleep } from '../systems/needs-system.js';
-import { getCharacterStorageKey } from '../character/character-save.js';
+import { getActiveCharacter, patchActiveState } from '../character/character-save.js';
 import { injectGameStyles } from '../styles.js';
-
-const STORAGE_KEY_BASE = 'warrcats_needs_skills';
-
-function getStorageKey() {
-  return getCharacterStorageKey(STORAGE_KEY_BASE);
-}
 
 const ICON_SRC = '/assets/knop.png';
 
 const TABS = [
-  { id: 'needs',   label: 'Потребности и знания' },
-  { id: 'about',   label: 'О котике' },
-  { id: 'map',     label: 'Окружающий мир' },
+  { id: 'needs',        label: 'Потребности и знания' },
+  { id: 'about',        label: 'О котике' },
+  { id: 'map',          label: 'Окружающий мир' },
   { id: 'achievements', label: 'Достижения' },
-  { id: 'info',    label: 'Личная информация' },
+  { id: 'info',         label: 'Личная информация' },
 ];
 
-const needs = [
-  { key: 'h', icon: '', label: 'Здоровье',         value: 100 },
-  { key: 'food', icon: '', label: 'Сытость',          value: 80  },
-  { key: 'toilet', icon: '', label: 'Нужда',            value: 0   },
-  { key: 'thirst', icon: '', label: 'Жажда',            value: 70  },
-  { key: 'e', icon: '', label: 'Бодрость',         value: 100 },
-  { key: 'ss', icon: '', label: 'Цап-царап',   value: 50  },
-];
-
-const DEFAULT_NEED_VALUES = needs.reduce((acc, n) => { acc[n.key] = n.value; return acc; }, {});
-
-const skills = [
-  { key: 'smell', icon: '', label: 'Нюх', value: 0, max: 100 },
-  { key: 'healing',  icon: '✨', label: 'Целительство',  value: 0, max: 100 },
+const NEED_DEFS = [
+  { key: 'h',      icon: '', label: 'Здоровье' },
+  { key: 'food',   icon: '', label: 'Сытость' },
+  { key: 'toilet', icon: '', label: 'Нужда' },
+  { key: 'thirst', icon: '', label: 'Жажда' },
+  { key: 'e',      icon: '', label: 'Бодрость' },
+  { key: 'ss',     icon: '', label: 'Цап-царап' },
 ];
 
 const ABOUT_SUBTABS = [
@@ -45,27 +32,58 @@ const ABOUT_SUBTABS = [
 ];
 
 let activeAboutSubTab = 'character';
-
 let activeNeedsSubTab = 'needs';
 
 const expandedTiers = { 1: false, 2: false };
 
-let barContainer = null;
+let barContainer   = null;
 let panelContainer = null;
-let activeTabId = null;
+let activeTabId    = null;
 let stylesInjected = false;
+
+function _activeFieldFor(key) {
+  return key;
+}
+
+function _readNeed(key) {
+  const a = getActiveCharacter();
+  if (!a) return null;
+  const v = a[_activeFieldFor(key)];
+  return v === undefined || v === null ? null : v;
+}
+
+function _writeNeed(key, value) {
+  const a = getActiveCharacter();
+  if (!a) return;
+  a[_activeFieldFor(key)] = value;
+  patchActiveState({ [_activeFieldFor(key)]: value });
+}
+
+function getNeedMax(needOrKey) {
+  const key = typeof needOrKey === 'string' ? needOrKey : needOrKey?.key;
+  if (key === 'h') return getMaxHealth();
+  if (key === 'e') return getMaxSleep();
+  return 100;
+}
+
+export function setNeedValue(key, value) {
+  const max = getNeedMax(key);
+  const clamped = Math.max(0, Math.min(max, value));
+  _writeNeed(key, clamped);
+  if (key === 'h') setHealth(clamped);
+  refreshActivePanel();
+}
+
+export function getNeedValue(key) {
+  return _readNeed(key);
+}
+
+export function reloadForActiveCharacter() {
+  refreshActivePanel();
+}
 
 export function initBottomMenu() {
   if (barContainer) return;
-
-  loadNeedsAndSkills();
-
-  
-  
-  const healthNeed = needs.find(n => n.key === 'h');
-  if (healthNeed) {
-    healthNeed.value = getHealth();
-  }
 
   injectStyles();
 
@@ -88,15 +106,10 @@ export function initBottomMenu() {
 
   document.body.appendChild(barContainer);
 
-  
   document.addEventListener('mousedown', handleOutsideClick);
-  
-  
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && panelContainer) {
-      closePanel();
-    }
-  }, true); 
+    if (e.key === 'Escape' && panelContainer) closePanel();
+  }, true);
 }
 
 export function hideBottomMenu() {
@@ -106,112 +119,6 @@ export function hideBottomMenu() {
     barContainer = null;
   }
   document.removeEventListener('mousedown', handleOutsideClick);
-}
-
-function getNeedMax(need) {
-  if (need.key === 'h') {
-    return getMaxHealth();
-  }
-  if (need.key === 'e') {
-    return getMaxSleep();
-  }
-  return 100;
-}
-
-export function setNeedValue(key, value) {
-  const need = needs.find(n => n.key === key);
-  if (!need) return;
-  const max = getNeedMax(need);
-  need.value = Math.max(0, Math.min(max, value));
-
-  
-  if (key === 'h') {
-    setHealth(need.value);
-  }
-
-  saveNeedsAndSkills();
-  refreshActivePanel();
-}
-
-export function getNeedValue(key) {
-  const need = needs.find(n => n.key === key);
-  return need ? need.value : null;
-}
-
-function getSkillMax(skill) {
-  if (skill.key === 'strength') {
-    return currentSettings?.maxStrength ?? 50;
-  }
-  return skill.max ?? 100;
-}
-
-function loadNeedsAndSkills() {
-  try {
-    const saved = localStorage.getItem(getStorageKey());
-    if (!saved) return;
-    const parsed = JSON.parse(saved);
-    if (parsed?.needs && Array.isArray(parsed.needs)) {
-      parsed.needs.forEach(savedNeed => {
-        const need = needs.find(n => n.key === savedNeed.key);
-        if (need) {
-          need.value = Math.max(0, Math.min(getNeedMax(need), savedNeed.value));
-        }
-      });
-    }
-    if (parsed?.skills && Array.isArray(parsed.skills)) {
-      parsed.skills.forEach(savedSkill => {
-        const skill = skills.find(s => s.key === savedSkill.key);
-        if (skill) {
-          skill.value = Math.max(0, Math.min(getSkillMax(skill), savedSkill.value));
-        }
-      });
-    }
-  } catch (e) {
-    console.error('Ошибка загрузки потребностей и знаний:', e);
-  }
-}
-
-function saveNeedsAndSkills() {
-  try {
-    localStorage.setItem(getStorageKey(), JSON.stringify({ needs, skills }));
-  } catch (e) {
-    console.error('Ошибка сохранения потребностей и знаний:', e);
-  }
-}
-
-export function reloadForActiveCharacter() {
-  needs.forEach(n => { n.value = DEFAULT_NEED_VALUES[n.key]; });
-  skills.forEach(s => { s.value = 0; });
-
-  loadNeedsAndSkills();
-
-  const healthNeed = needs.find(n => n.key === 'h');
-  if (healthNeed) {
-    healthNeed.value = getHealth();
-  }
-
-  refreshActivePanel();
-}
-
-export function setSkillValue(key, value) {
-  const skill = skills.find(s => s.key === key);
-  if (!skill) return;
-  const max = getSkillMax(skill);
-  skill.value = Math.max(0, Math.min(max, value));
-
-  saveNeedsAndSkills();
-  refreshActivePanel();
-}
-
-export function addSkillValue(key, delta) {
-  const skill = skills.find(s => s.key === key);
-  if (!skill) return;
-  setSkillValue(key, skill.value + delta);
-}
-
-export function getSkillValue(key) {
-  const skill = skills.find(s => s.key === key);
-  return skill ? skill.value : null;
 }
 
 export function refreshActivePanel() {
@@ -228,10 +135,7 @@ function handleOutsideClick(e) {
 }
 
 function togglePanel(tabId) {
-  if (activeTabId === tabId) {
-    closePanel();
-    return;
-  }
+  if (activeTabId === tabId) { closePanel(); return; }
   openPanel(tabId);
 }
 
@@ -259,7 +163,6 @@ function openPanel(tabId) {
   panelContainer.querySelector('.bottom-menu-panel-close')
     .addEventListener('click', closePanel);
 
-  
   barContainer.querySelectorAll('.bottom-menu-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tabId === tabId);
   });
@@ -267,7 +170,6 @@ function openPanel(tabId) {
 
 function closePanel() {
   stopMapTicker();
-
   if (panelContainer) {
     panelContainer.remove();
     panelContainer = null;
@@ -281,35 +183,19 @@ function closePanel() {
 }
 
 function renderTabContent(tabId) {
-  if (tabId === 'needs') {
-    return renderNeedsAndSkills();
-  }
-  if (tabId === 'about') {
-    return renderAboutTab();
-  }
-  if (tabId === 'map') {
-    return renderMapTab();
-  }
-  
+  if (tabId === 'needs') return renderNeedsAndSkills();
+  if (tabId === 'about') return renderAboutTab();
+  if (tabId === 'map')   return renderMapTab();
   return `<div class="bottom-menu-empty">Раздел в разработке...</div>`;
 }
 
 function renderAndBindTabContent(tabId, contentEl) {
   contentEl.innerHTML = renderTabContent(tabId);
 
-  if (tabId === 'about') {
-    bindAboutSubTabHandlers(contentEl);
-  }
-
-  if (tabId === 'needs') {
-    bindNeedsTabHandlers(contentEl);
-  }
-
-  if (tabId === 'map') {
-    startMapTicker();
-  } else {
-    stopMapTicker();
-  }
+  if (tabId === 'about') bindAboutSubTabHandlers(contentEl);
+  if (tabId === 'needs') bindNeedsTabHandlers(contentEl);
+  if (tabId === 'map')   startMapTicker();
+  else                   stopMapTicker();
 }
 
 function renderMoveTier(tier) {
@@ -413,7 +299,6 @@ function bindNeedsTabHandlers(contentEl) {
 function renderMapTab() {
   const period = getCurrentPeriod();
   const remainingLabel = formatDuration(getTimeUntilNextPeriod());
-
   return `
     <div class="map-time-info">
       <span class="map-time-current">${period.label}</span>
@@ -428,22 +313,17 @@ function formatDuration(ms) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
-} 
+}
 
 let mapTickIntervalId = null;
 
 function startMapTicker() {
   if (mapTickIntervalId) return;
-  mapTickIntervalId = setInterval(() => {
-    refreshActivePanel();
-  }, 1000);
+  mapTickIntervalId = setInterval(() => refreshActivePanel(), 1000);
 }
 
 function stopMapTicker() {
-  if (mapTickIntervalId) {
-    clearInterval(mapTickIntervalId);
-    mapTickIntervalId = null;
-  }
+  if (mapTickIntervalId) { clearInterval(mapTickIntervalId); mapTickIntervalId = null; }
 }
 
 function bindAboutSubTabHandlers(contentEl) {
@@ -471,30 +351,27 @@ function renderAboutTab() {
 }
 
 function renderAboutSubTabContent(subTabId) {
-  if (subTabId === 'character') {
-    return renderCharacterInfo();
-  }
-  
+  if (subTabId === 'character') return renderCharacterInfo();
   return `<div class="bottom-menu-empty">Раздел в разработке...</div>`;
 }
 
 function renderCharacterInfo() {
   const profile = getProfile();
+  const healthValue = Math.round(_readNeed('h') ?? 0);
+  const healthMax = Math.round(getNeedMax('h'));
 
-  const healthNeed = needs.find(n => n.key === 'h');
-  const healthValue = healthNeed ? Math.round(healthNeed.value) : 0;
-  const healthMax = healthNeed ? Math.round(getNeedMax(healthNeed)) : 100;
+  const tribeText = typeof profile.tribe === 'object' ? (profile.tribe?.name ?? '—') : (profile.tribe ?? '—');
 
   const rows = [
-    { label: 'Имя', value: profile.name },
-    { label: 'Племя', value: profile.tribe },
+    { label: 'Имя',       value: profile.name },
+    { label: 'Племя',     value: tribeText },
     { label: 'Должность', value: profile.role },
-    { label: 'Возраст', value: `${profile.ageMoons} ${moonLabel(profile.ageMoons)}` },
-    { label: 'Здоровье', value: `${healthValue} / ${healthMax}` },
-    { label: 'Урон', value: formatDamageRange() },
-    { label: 'Родители', value: profile.parents },
-    { label: 'Пара', value: profile.mate },
-    { label: 'Котята', value: profile.kittens },
+    { label: 'Возраст',   value: `${profile.ageMoons} ${moonLabel(profile.ageMoons)}` },
+    { label: 'Здоровье',  value: `${healthValue} / ${healthMax}` },
+    { label: 'Урон',      value: formatDamageRange() },
+    { label: 'Родители',  value: profile.parents ?? '—' },
+    { label: 'Пара',      value: profile.mate ?? '—' },
+    { label: 'Котята',    value: profile.kittens ?? '—' },
   ];
 
   return `
@@ -538,16 +415,17 @@ function renderNeedsAndSkills() {
 function renderNeeds() {
   return `
     <div class="needs-list">
-      ${needs.map(n => {
+      ${NEED_DEFS.map(n => {
+        const value = _readNeed(n.key) ?? 0;
         const max = getNeedMax(n);
-        const pct = max > 0 ? Math.min(100, Math.round((n.value / max) * 100)) : 0;
-        const valueText = `${Math.round(n.value)} / ${Math.round(max)}`;
+        const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+        const valueText = `${Math.round(value)} / ${Math.round(max)}`;
         return `
           <div class="need-row">
             <div class="need-label">${n.label}</div>
             <div class="need-bar-line">
               <div class="need-bar-track">
-                <div class="need-bar-fill" style="width:${pct}%; background:${getBarColor(n, pct)};"></div>
+                <div class="need-bar-fill" style="width:${pct}%; background:${getBarColor(n.key, pct)};"></div>
                 <span class="need-bar-text">${valueText}</span>
               </div>
               <span class="need-pct">${pct}%</span>
@@ -567,8 +445,6 @@ function renderSkillsSubTab() {
   const xpLabel = isMax ? `${xp} xp (макс.)` : `${xp} / ${rank.max} xp`;
   const tooltip = `Сила удара: x${rank.dam.toFixed(1)} · Бонус: ${rank.bonus}`;
 
-  const buffsHtml = renderBuffsAccordion(rank);
-
   return `
     <div class="combat-skill">
       <div class="combat-skill-title">Боевые умения</div>
@@ -583,29 +459,28 @@ function renderSkillsSubTab() {
       <div class="moves-block-title">Боевые приёмы</div>
       ${renderMoveAccordion(1, 'Уровень Оруженосца')}
       ${renderMoveAccordion(2, 'Уровень Воителя')}
-      ${buffsHtml}
+      ${renderBuffsAccordion()}
     </div>
   `;
 }
 
 const ALL_BUFFS = [
-  { name: 'Урон x1.5',        icon: '⚔️', moveId: 'm1', tooltip: 'Приём «Удар сзади»: шанс 35% — следующий удар наносит в 1.5 раза больше урона.' },
-  { name: 'Кровотечение',      icon: '🩸', moveId: 'm2', tooltip: 'Приём «Прочёс живота»: шанс 5% — противник теряет 8 HP за 2 секунды.' },
-  { name: 'Оглушение',         icon: '💫', moveId: 'm3', tooltip: 'Приём «Удар передней лапой»: шанс 2% — противник не может атаковать 3 секунды.' },
-  { name: 'Царапина',          icon: '🐾', moveId: 'm4', tooltip: 'Приём «Скользящий удар»: шанс 10% — противник теряет 10 HP за 5 секунд.' },
-  { name: 'Иммобилизация',     icon: '🔒', moveId: 'm5', tooltip: 'Приём «Мёртвая хватка»: захват шеи зубами, противник обездвижен на 2 секунды.' },
-  { name: 'Прыжок +25%',      icon: '🐆', moveId: 'm6', tooltip: 'Приём «Прыжок с зацепом»: высота прыжка увеличена на 25%, выше шанс запрыгнуть на противника.' },
-  { name: 'Дезориентация',     icon: '🌀', moveId: 'm7', tooltip: 'Приём «Встряска»: защита противника снижается на 20% на 3 секунды.' },
-  { name: 'Урон x2.2 + стан', icon: '💥', moveId: 'm8', tooltip: 'Приём «Вертикальный бросок»: бросок вверх — урон x2.2 и оглушение противника на 1 секунду.' },
-  { name: 'Отброс x1.5',      icon: '🌪️', moveId: 'm9', tooltip: 'Приём «Бросок на плечи»: дальность отбрасывания противника увеличена в 1.5 раза.' },
-  { name: 'Контратака 30%',   icon: '🔄', moveId: 'm10', tooltip: 'Приём «Перекатывание»: шанс 30% — после уклонения наносится контратака с уроном x1.2.' },
+  { name: 'Урон x1.5',         icon: '⚔️',  moveId: 'm1',  tooltip: 'Приём «Удар сзади»: шанс 35% — следующий удар наносит в 1.5 раза больше урона.' },
+  { name: 'Кровотечение',      icon: '🩸',  moveId: 'm2',  tooltip: 'Приём «Прочёс живота»: шанс 5% — противник теряет 8 HP за 2 секунды.' },
+  { name: 'Оглушение',         icon: '💫',  moveId: 'm3',  tooltip: 'Приём «Удар передней лапой»: шанс 2% — противник не может атаковать 3 секунды.' },
+  { name: 'Царапина',          icon: '🐾',  moveId: 'm4',  tooltip: 'Приём «Скользящий удар»: шанс 10% — противник теряет 10 HP за 5 секунд.' },
+  { name: 'Иммобилизация',     icon: '🔒',  moveId: 'm5',  tooltip: 'Приём «Мёртвая хватка»: захват шеи зубами, противник обездвижен на 2 секунды.' },
+  { name: 'Прыжок +25%',       icon: '🐆',  moveId: 'm6',  tooltip: 'Приём «Прыжок с зацепом»: высота прыжка увеличена на 25%.' },
+  { name: 'Дезориентация',     icon: '🌀',  moveId: 'm7',  tooltip: 'Приём «Встряска»: защита противника снижается на 20% на 3 секунды.' },
+  { name: 'Урон x2.2 + стан',  icon: '💥',  moveId: 'm8',  tooltip: 'Приём «Вертикальный бросок»: урон x2.2 и оглушение на 1 секунду.' },
+  { name: 'Отброс x1.5',       icon: '🌪️', moveId: 'm9',  tooltip: 'Приём «Бросок на плечи»: дальность отбрасывания увеличена в 1.5 раза.' },
+  { name: 'Контратака 30%',    icon: '🔄',  moveId: 'm10', tooltip: 'Приём «Перекатывание»: шанс 30% — контратака с уроном x1.2.' },
 ];
 
-function renderBuffsAccordion(rank) {
+function renderBuffsAccordion() {
   const open = expandedTiers['buffs'];
   const headerCls = open ? 'open' : '';
 
-  
   const body = ALL_BUFFS.map(b => {
     const learned = b.moveId ? isMoveLearned(b.moveId) : false;
     const cls = learned ? 'buff-chip active' : 'buff-chip dimmed';
@@ -634,13 +509,12 @@ function renderBuffsAccordion(rank) {
   `;
 }
 
-function getBarColor(need, pct) {
-  if (need.key === 'toilet') {
+function getBarColor(key, pct) {
+  if (key === 'toilet') {
     if (pct > 60) return '#952424';
     if (pct > 30) return '#cf9236';
     return '#63a91d';
   }
-
   if (pct > 60) return '#63a91d';
   if (pct > 30) return '#cf9236';
   return '#952424';
@@ -649,6 +523,5 @@ function getBarColor(need, pct) {
 function injectStyles() {
   if (stylesInjected) return;
   stylesInjected = true;
-
   injectGameStyles();
 }
